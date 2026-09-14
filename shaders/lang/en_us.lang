@@ -1,0 +1,5 @@
+option.RENDER_SCALE=Render Scale
+option.RENDER_SCALE.comment=Resolution multiplier for the expensive passes (lighting, bloom, reflections). Wired now; takes visible effect once those passes arrive.
+option.FULLBRIGHT=Fullbright
+option.FULLBRIGHT.comment=Lifts the minimum light level so caves are visible without torches, without flattening the colour grading.
+profile.comment=POTATO: fastest - sky, lighting colour and tonemap only. REGULAR: all effects at moderate cost, half-res post. INSANE: everything maxed.
