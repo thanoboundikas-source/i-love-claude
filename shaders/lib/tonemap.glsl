@@ -23,8 +23,12 @@ vec3 tonemapSolstice(vec3 hdr) {
     // Low-light desaturation (like the eye at night): very dark areas lose
     // some colour and lean slightly blue, so moonlit grass reads as night and
     // not as dim daylight. Lit areas are untouched.
+    // (Much weaker with FULLBRIGHT, whose whole point is colourful caves.)
     float lum = luminance(hdr);
     float dim = 1.0 - smoothstep(0.004, 0.06, lum);
+    #ifdef FULLBRIGHT
+        dim *= 0.25;
+    #endif
     hdr = mix(hdr, vec3(lum) * vec3(0.86, 0.95, 1.12), dim * 0.45);
 
     float peak = max(max(hdr.r, hdr.g), hdr.b);

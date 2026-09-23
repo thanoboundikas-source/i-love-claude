@@ -149,28 +149,39 @@ See `DECISIONS.md` for the why. Summary:
 Buffers (all sizes relative to the window):
 - `colortex0` RGBA8 — albedo (sRGB) + vanilla AO in alpha. Written by opaque gbuffers.
 - `colortex1` RGBA16 — opaque G-buffer: octahedral normal (R,G), block+sky
-  light (B, 8+8 bits), smoothness 8 | emissive 4 | flags 4 (A). After the
-  deferred pass the same buffer holds the *translucent* layer data written by
-  `gbuffers_water` (only trusted where depthtex0 < depthtex1).
-- `colortex2` R11F_G11F_B10F — HDR scene colour. Deferred lighting writes it,
-  translucents blend into it, composites refine it, final tonemaps it (mipmapped
-  in final for bloom).
+  light (B, 8+8 bits), A = smoothness 7 | emissive 4 | flags 4, bit 15 clear.
+  After the deferred pass the same buffer holds the *translucent layer*
+  written by `gbuffers_water` (normal, biome tint, sky light, material) with
+  bit 15 set. Layout: `lib/encoding.glsl`.
+- `colortex2` R11F_G11F_B10F — HDR scene colour. deferred1 writes it,
+  translucents blend into it, composite1/2 refine it, final tonemaps it
+  (mipmapped in final for bloom).
 - `colortex3` RGBA16F, size = RENDER_SCALE — clouds (premultiplied rgb, alpha).
-- `colortex4` RGBA16F, size = RENDER_SCALE × effects scale — water reflection
-  (rgb) + godrays (a).
+- `colortex4` RGBA16F, size = RENDER_SCALE × (HALF_RES_FX ? 0.5 : 1) — water
+  reflection (rgb) + godray amount (a).
 - `colortex5` RGBA16F, never cleared — TAA history.
-- `colortex6` RGBA8 — emissive colour (for the coloured block-light tint), mipmapped.
-- shadow: `shadowtex0/1` + `shadowcolor0` (translucent tint).
+- `colortex6` RGBA8 — emissive colour for the coloured block-light tint
+  (mipmapped before deferred1).
+- shadow: `shadowtex0/1` (hardware compare) + `shadowcolor0` (translucent tint;
+  alpha 0 = water).
 
-Pass order (Overworld): shadow → gbuffers (opaque) → `deferred` (clouds,
-scaled) → `deferred1` (lighting, sky, cloud composite, fog; full res) →
-gbuffers translucent (water data / forward glass, particles, weather) →
-`composite` (water reflections + godrays, scaled) → `composite1` (water
-shading, underwater fog) → `composite2` (godray add + TAA) → `final` (bloom,
-tonemap, sharpen). Passes are switched off with `program.<name>.enabled` when
-their feature is off. Nether and End live in `shaders/nether/` and
-`shaders/end/` (see `dimension.properties`), each a complete small forward
-pipeline.
+Pass order (Overworld) and when each runs:
+- `shadow` (SHADOWS) → gbuffers opaque → `deferred` (3D clouds, scaled) →
+  `deferred1` (lighting, sky, clouds composite, fog, POTATO underwater fog;
+  always) → gbuffers translucent (water data or POTATO forward water, glass,
+  particles, weather) → `composite` (SSR + godray march, scaled; WATER_REFLECTIONS
+  or GODRAYS) → `composite1` (water shading, underwater fog, godray add;
+  water features or GODRAYS) → `composite2` (TAA) → `final` (sharpen, bloom,
+  tonemap).
+- Switched off with `program.<name>.enabled` blocks in shaders.properties.
+- Nether/End: `shaders/nether/`, `shaders/end/` (dimension.properties), a
+  forward pipeline using the vanilla lightmap (`program/dim_*`).
+
+Offline tools: `tools/preview.py sky|clouds|clouds_above|clouds_flat|world|hut|lake|pbr`
+renders the pack's lib code on the Apple GPU to `previews/*.png` (a contact
+sheet you can open with the Read tool) — use it to judge looks before asking
+Chris to test. `tools/pair_screenshots.py` labels the TESTING.md comparison
+screenshots.
 
 Source layout: `shaders/lib/` shared code, `shaders/program/` program bodies
 included by thin per-program stubs in `shaders/`, `shaders/nether/`,
