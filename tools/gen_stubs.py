@@ -39,6 +39,8 @@ OVERWORLD = [
     ("gbuffers_skytextured", "gbuffers_sky", "gbuffers_sky", None),
     ("deferred", "fullscreen", "deferred_clouds", None),
     ("deferred1", "fullscreen", "deferred_lighting", None),
+    ("composite", "fullscreen", "composite_fx", None),
+    ("composite1", "fullscreen", "composite_water", None),
     ("final", "fullscreen", "final", None),
 ]
 

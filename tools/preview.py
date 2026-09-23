@@ -246,12 +246,15 @@ vec3 previewClouds(vec3 dir) {
 WORLD_EXTRA = r"""
 #include "/lib/encoding.glsl"
 #include "/lib/lighting.glsl"
+#include "/lib/water.glsl"
 PREVIEW_FOG_INCLUDE
 // ---- tiny voxel test world (preview only) ----
 int blockAt(ivec3 b) {
     if (abs(b.x) > 40 || abs(b.z) > 40 || b.y < 50 || b.y > 90) return 0;
     int h = 64 + int(floor(1.6 * sin(float(b.x) * 0.21) + 1.4 * cos(float(b.z) * 0.17)));
     if (b.x >= 2 && b.x <= 15 && b.z >= -2 && b.z <= 14) h = 64;
+    float lakeR = length(vec2(b.xz) - vec2(-18.0, 16.0));
+    if (lakeR < 16.0) h = min(h, 64 - int(floor(6.0 * (1.0 - lakeR / 16.0) + 0.5)));
     // hut 6..11 x, 6..11 z, walls 3 high, roof, open doorway
     if (b.x >= 6 && b.x <= 11 && b.z >= 6 && b.z <= 11 && b.y > 64 && b.y <= 68) {
         bool wall = b.x == 6 || b.x == 11 || b.z == 6 || b.z == 11;
@@ -309,15 +312,56 @@ bool traceVoxels(vec3 ro, vec3 rd, int steps, out ivec3 hitB, out vec3 hitN, out
     return false;
 }
 
+vec3 shadeHit(vec3 ro, vec3 dir, out float hitDist);
 vec3 previewWorld(vec3 dir) {
+    float hd;
+    return shadeHit(cameraPosition, dir, hd);
+}
+
+const float WATER_Y = 63.9;
+bool isLake(vec3 p) { return length(p.xz - vec2(-17.5, 16.5)) < 15.5; }
+
+vec3 previewLake(vec3 dir) {
     vec3 ro = cameraPosition;
+    float hd;
+    if (dir.y < 0.0) {
+        float tw = (WATER_Y - ro.y) / dir.y;
+        vec3 p = ro + dir * tw;
+        ivec3 hb; vec3 hn; float ht;
+        bool terrainFirst = traceVoxels(ro, dir, 160, hb, hn, ht) && ht < tw;
+        if (isLake(p) && !terrainFirst) {
+            vec3 n = waterWaveNormal(p, vec3(0.0, 1.0, 0.0), tw);
+            vec3 v = -dir;
+            float f = waterFresnel(dot(n, v));
+            vec3 r = reflect(dir, n);
+            r.y = abs(r.y);
+            vec3 refl = shadeHit(p + vec3(0.0, 0.02, 0.0), r, hd);
+            vec3 td = refract(dir, n, 1.0 / 1.333);
+            float bd;
+            vec3 below = shadeHit(p - vec3(0.0, 0.02, 0.0), td, bd);
+            vec3 tint = vec3(0.247, 0.463, 0.894);
+            vec3 T = exp(-waterAbsorption(tint) * min(bd, 64.0));
+            vec3 refr = below * T + waterScatterColor(tint, 1.0) * (1.0 - T);
+            vec3 col = mix(refr, refl, f);
+            ivec3 sb; vec3 sn; float st;
+            float sh = traceVoxels(p + vec3(0.0, 0.05, 0.0), lightDir, 96, sb, sn, st) ? 0.0 : 1.0;
+            col += directLight * sh * cloudShadow(p) * sunGlint(n, v, lightDir);
+            return col;
+        }
+    }
+    return shadeHit(ro, dir, hd);
+}
+
+vec3 shadeHit(vec3 ro, vec3 dir, out float hitDist) {
     ivec3 hb; vec3 hn; float ht;
     vec3 col;
+    hitDist = 1e4;
     if (!traceVoxels(ro, dir, 160, hb, hn, ht)) {
         col = skyColorFull(dir);
         float hd; vec4 c = fadeClouds(traceClouds(ro, dir, 1e6, hd), dir, hd);
         return col * (1.0 - c.a) + c.rgb;
     }
+    hitDist = ht;
     vec3 p = ro + dir * ht;
     int id = blockAt(hb);
     vec3 f = fract(p);
@@ -405,6 +449,11 @@ if __name__ == "__main__":
         pres = [p for p in PRESETS if p[0] in ("noon", "sunset", "night")]
         contact_sheet("previewWorld(dir)", CLOUD_EXTRA + extra, "hut", presets=pres,
                       textures=[("cloudTex", 0)], cam_y=66.6, cam_xz=(8.5, 3.0), look_at=(8.6, 65.6, 9.0))
+    elif scene == "lake":
+        extra = WORLD_EXTRA.replace("PREVIEW_FOG_INCLUDE", FOG_INCLUDE).replace("PREVIEW_FOG_APPLY", FOG_APPLY)
+        pres = [p for p in PRESETS if p[0] in ("noon", "morning", "sunset", "night")]
+        contact_sheet("previewLake(dir)", CLOUD_EXTRA + extra, "lake", presets=pres,
+                      textures=[("cloudTex", 0)], cam_y=69.0, cam_xz=(-2.0, 2.0), look_at=(-18.0, 62.0, 18.0))
     elif scene == "clouds_flat":
         contact_sheet("previewClouds(dir)", "#define PREVIEW_FLAT 1\n" + CLOUD_EXTRA, "clouds_flat",
                       presets=cloud_presets, textures=[("cloudTex", 0)], pitch=18.0, cam_y=90.0)

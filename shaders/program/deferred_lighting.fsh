@@ -14,6 +14,7 @@
 #include "/lib/lighting.glsl"
 #include "/lib/clouds.glsl"
 #include "/lib/shadows.glsl"
+#include "/lib/water.glsl"
 
 uniform sampler2D colortex0;
 uniform sampler2D colortex1;
@@ -122,6 +123,11 @@ void main() {
             #endif
             color = color * (1.0 - cl.a) + cl.rgb;
         }
+    #endif
+
+    // Camera under water without the deferred water pass (POTATO): fog here.
+    #ifndef WATER_DEFERRED
+        color = applyUnderwaterFog(color, depth >= 1.0 ? 1e4 : dist);
     #endif
 
     outScene = vec4(color, 1.0);

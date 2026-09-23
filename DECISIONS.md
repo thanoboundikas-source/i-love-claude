@@ -171,3 +171,36 @@ are preserved in git history, commit d1cb592.)
 41. **Low-light desaturation** in the tonemap (below ~0.06 luminance colour
     fades 45% toward a slightly blue grey): nights and dark caves read as
     night rather than dim daylight; lit areas are untouched.
+
+## Water
+
+42. **Deferred water, forward everything else translucent.** Water writes its
+    wave normal, biome tint and sky light to the translucent layer and nothing
+    to the scene; composite1 shades it (refraction needs the scene behind it,
+    which a gbuffers program cannot read). Glass stays forward so layering
+    works. Known consequence: water seen *through* glass is the glass over
+    unshaded underwater scene (rare: aquariums).
+43. **Reflections: SSR on water only**, at RENDER_SCALE x (0.5 in REGULAR),
+    geometric step growth (SSR_STEPS covers 0.25..600 blocks) + 5 binary
+    refinement steps, against opaque depth so the surface never hits itself.
+44. **Clouds in reflections:** a missed ray looks up the scene pixel in its
+    direction at infinity — if that pixel is sky, it already contains the
+    exact sky *and the 3D clouds*. Only when that is off-screen or blocked does
+    it fall back to the analytic sky + flat clouds. Cheap and accurate.
+45. **Absorption from the biome tint** (per block, red absorbed first) over the
+    real path length behind the surface: shallow water is clear (clean
+    shoreline, no foam — not in spec), deep water takes the biome colour.
+46. **Refraction offset shrinks with shallow depth and distance** and is only
+    accepted if the bent sample is also behind the surface (no halos of land
+    pulled into the water).
+47. **Waves are normal-only** (three octaves of moving value noise, fading out
+    by 90 blocks so far water doesn't sparkle). No vertex displacement: it
+    opens seams at shorelines and against blocks.
+48. **Sun glint**: GGX (roughness 0.2) on the wave normal, shadowed by the
+    shadow map and cloud shadows.
+49. **Underwater**: fog uses vanilla's `fogColor` (biome water fog colour while
+    submerged) lit by the eye's sky light; looking up gives Snell's window
+    with total internal reflection past the critical angle.
+50. **POTATO water** is forward-shaded: sky + flat-cloud reflection, deep
+    colour, glint, alpha by Fresnel. SSR/refraction stay off per spec, but
+    matte water looked broken.
