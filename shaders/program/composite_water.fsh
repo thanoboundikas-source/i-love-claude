@@ -24,12 +24,14 @@
 #include "/lib/water.glsl"
 #define SHADOW_TAPS 2
 #include "/lib/shadows.glsl"
+#include "/lib/fog.glsl"
+#include "/lib/godrays.glsl"
 
 uniform sampler2D colortex1;
 uniform sampler2D colortex2;
 uniform sampler2D depthtex0;
 uniform sampler2D depthtex1;
-#ifdef WATER_REFLECTIONS
+#if defined WATER_REFLECTIONS || defined GODRAYS_ACTIVE
     uniform sampler2D colortex4;
 #endif
 
@@ -49,6 +51,7 @@ void main() {
     vec3 viewPos0 = screenToView(texcoord, d0);
     float dist = d0 >= 1.0 ? 1e4 : length(viewPos0);
 
+    #ifdef WATER_DEFERRED
     vec4 data = texelFetch(colortex1, px, 0);
     if (d0 < d1 && translucentMaterial(data) == MAT_WATER) {
         vec3 tint; float sky;
@@ -92,15 +95,17 @@ void main() {
                 vec3 refl = reflectionMiss(rView, viewDirToWorld(rView), sky, camWorld);
             #endif
 
-            color = mix(refracted, refl, f);
-
             #ifdef SHADOWS
                 vec3 sh = shadowVisibility(playerPos, vec3(0.0, 1.0, 0.0), ign(gl_FragCoord.xy)) * lightLeakGuard(sky);
                 sh = mix(sh, vec3(skyShadowProxy(sky)), shadowEdgeFade(playerToShadowClip(playerPos)));
             #else
                 vec3 sh = vec3(skyShadowProxy(sky));
             #endif
-            color += directLight * sh * cloudShadow(playerPos + camWorld) * sunGlint(n, v, lightDir);
+            vec3 glint = directLight * sh * cloudShadow(playerPos + camWorld) * sunGlint(n, v, lightDir);
+            // Air fog on the surface itself (reflection + glint); the scene
+            // behind was already fogged to its own distance in deferred1.
+            vec3 surface = applyAirFog(refl + glint / max(f, 0.02), playerPos);
+            color = mix(refracted, surface, f);
         } else {
             // Looking up from under water: the sky/world above is visible
             // inside Snell's window; past the critical angle the surface
@@ -113,8 +118,14 @@ void main() {
     }
 
     // Camera under water: fog up to the first thing along the view ray.
-    #ifdef WATER_DEFERRED
-        color = applyUnderwaterFog(color, dist);
+    color = applyUnderwaterFog(color, dist);
+    #endif
+
+    #ifdef GODRAYS_ACTIVE
+        if (isEyeInWater == 0) {
+            vec3 dirW = normalize(viewDirToWorld(viewPos0));
+            color += godrayLight(texture(colortex4, texcoord).a, dirW);
+        }
     #endif
 
     outScene = vec4(color, 1.0);

@@ -15,6 +15,7 @@
 #include "/lib/clouds.glsl"
 #include "/lib/shadows.glsl"
 #include "/lib/water.glsl"
+#include "/lib/fog.glsl"
 
 uniform sampler2D colortex0;
 uniform sampler2D colortex1;
@@ -89,6 +90,16 @@ void main() {
         vec3 playerPos = viewToPlayer(viewPos);
         dist = isHand ? 0.0 : length(viewPos);
 
+        #ifdef WET_LOOK
+            // Rain: sky-exposed surfaces in rainy biomes darken and turn
+            // glossy (the gloss shows once generated specular is on).
+            if (biome_precipitation == 1 && (s.flags & FLAG_UNLIT) == 0) {
+                float wet = wetness * smoothstep(0.82, 0.96, s.light.y) * (0.55 + 0.45 * saturate(s.normal.y));
+                s.albedo = mix(s.albedo, s.albedo * s.albedo * 1.6, wet * 0.45);
+                s.smoothness = max(s.smoothness, wet * 0.85);
+            }
+        #endif
+
         if ((s.flags & FLAG_UNLIT) != 0) {
             color = s.albedo * (1.0 + s.emissive * 3.0);
         } else {
@@ -109,6 +120,7 @@ void main() {
 
             color = shadeSurface(s, shadow, tint, tintWeight);
         }
+        if (!isHand) color = applyAirFog(color, playerPos);
     }
 
     // Clouds in front of this pixel (terrain nearer than the cloud layer

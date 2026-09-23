@@ -13,6 +13,8 @@
 #include "/lib/sky.glsl"
 #include "/lib/clouds.glsl"
 #include "/lib/water.glsl"
+#include "/lib/shadows.glsl"
+#include "/lib/godrays.glsl"
 
 uniform sampler2D colortex1;
 uniform sampler2D colortex2;
@@ -59,6 +61,13 @@ void main() {
                     fx.rgb = miss;
                 }
             }
+        }
+    #endif
+
+    #ifdef GODRAYS_ACTIVE
+        if (isEyeInWater == 0) {
+            vec3 endView = screenToView(texcoord, d0 >= 1.0 ? 0.9999 : d0);
+            fx.a = godrayAmount(viewToPlayer(endView), ignAnimated(gl_FragCoord.xy, frameCounter));
         }
     #endif
 

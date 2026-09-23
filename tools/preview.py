@@ -169,11 +169,11 @@ def base_uniforms(sun_angle, forward, w, h, rain=0.0, thunder=0.0, moon_phase=0,
     moon_view = (mv[:3, :3] @ -sun) * 100
     return [
         f"f viewWidth {w}", f"f viewHeight {h}", f"f aspectRatio {w / h}", "f near 0.05", "f far 256.0",
-        f"f sunAngle {sun_angle}", f"i moonPhase {moon_phase}", f"f rainStrength {rain}", f"f wetness {rain}",
+        f"f sunAngle {sun_angle}", f"i moonPhase {moon_phase}", f"f rainStrength {rain}", f"f wetness {rain}", "f blindness 0", "f darknessFactor 0",
         f"f thunderStrength {thunder}", f"f frameTimeCounter {t}", "i frameCounter 0", "i worldDay 3",
         f"f cloudHeight 192.33", f"v3 cameraPosition {cam_xz[0]} {cam_y} {cam_xz[1]}", f"f eyeAltitude {cam_y}",
         f"v3 shadowLightPosition {(sun_view if sun[1] > -0.001 else moon_view)[0]} {(sun_view if sun[1] > -0.001 else moon_view)[1]} {(sun_view if sun[1] > -0.001 else moon_view)[2]}",
-        "f nightVision 0", "i isEyeInWater 0", "v2 eyeBrightnessSmooth 0 240",
+        "f nightVision 0", "i isEyeInWater 0", "i2 eyeBrightnessSmooth 0 240", "i biome_precipitation 1",
         f"v3 sunPosition {sun_view[0]} {sun_view[1]} {sun_view[2]}",
         f"v3 moonPosition {moon_view[0]} {moon_view[1]} {moon_view[2]}",
         m4("gbufferModelView", mv), m4("gbufferModelViewInverse", mvi),
@@ -391,8 +391,8 @@ vec3 shadeHit(vec3 ro, vec3 dir, out float hitDist) {
 """
 
 
-FOG_INCLUDE = ""
-FOG_APPLY = ""
+FOG_INCLUDE = '#include "/lib/fog.glsl"'
+FOG_APPLY = "col = applyAirFog(col, p - cameraPosition);"
 
 
 def contact_sheet(body_color, extra, name, w=480, h=270, presets=PRESETS, textures=(), pitch=8.0, cam_y=80.0, fov=70.0,

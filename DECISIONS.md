@@ -204,3 +204,29 @@ are preserved in git history, commit d1cb592.)
 50. **POTATO water** is forward-shaded: sky + flat-cloud reflection, deep
     colour, glint, alpha by Fresnel. SSR/refraction stay off per spec, but
     matte water looked broken.
+
+## Atmosphere
+
+51. **Fog = height haze + border fade**, whichever is stronger. Haze is
+    analytic exponential height fog (scale height 55 blocks around sea level),
+    density 0.0016/block clear, 0.0075 rain, +0.004 thunder, scaled by
+    FOG_DENSITY. Its colour is the sky gradient *behind the object*, so
+    distant terrain melts into the horizon (and into the sunset glow toward
+    the sun). The border fade (72-98% of render distance) is kept even with
+    Distance Fog off, because a visible world edge is never wanted.
+52. **Caves stay clean**: haze fades out with the eye's sky light, so
+    underground there is no bright sky-coloured fog. Lava, powder snow,
+    blindness and darkness get their own fogs.
+53. **Water surfaces fog only their reflection + glint**; the refracted scene
+    was already fogged to its own distance in deferred1 (avoids double fog).
+54. **Godrays are shadow-map volumetric light**, not a screen-space radial
+    blur: they appear through trees and window gaps even when the sun is off
+    screen, and never smear across the sky. GODRAY_SAMPLES (8 REGULAR, 12
+    INSANE) jittered steps up to 160 blocks in the scaled effects pass (alpha
+    of colortex4); Henyey-Greenstein phase (g=0.72) and colour are applied at
+    full resolution in composite1. Strength 0.10 x option — "subtle". Off
+    underground and much weaker in rain.
+55. **Wet look**: in rainy biomes (`biome_precipitation == 1`, so no wet
+    deserts or snow), sky-exposed surfaces — mostly tops — darken (albedo
+    squared toward itself) and gain smoothness 0.85, which the generated
+    specular turns into a gloss. Driven by `wetness`, so it dries slowly.

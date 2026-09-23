@@ -77,6 +77,7 @@ int main(int argc, char **argv) {
         while (skip && *rest) { while (*rest && *rest != ' ') rest++; while (*rest == ' ') rest++; skip--; }
         if (!strcmp(kind, "f")) { float v; sscanf(rest, "%f", &v); glUniform1f(loc, v); }
         else if (!strcmp(kind, "i")) { int v; sscanf(rest, "%d", &v); glUniform1i(loc, v); }
+        else if (!strcmp(kind, "i2")) { int a, b; sscanf(rest, "%d %d", &a, &b); glUniform2i(loc, a, b); }
         else if (!strcmp(kind, "v2")) { float a, b; sscanf(rest, "%f %f", &a, &b); glUniform2f(loc, a, b); }
         else if (!strcmp(kind, "v3")) { float a, b, c; sscanf(rest, "%f %f %f", &a, &b, &c); glUniform3f(loc, a, b, c); }
         else if (!strcmp(kind, "v4")) { float a, b, c, d; sscanf(rest, "%f %f %f %f", &a, &b, &c, &d); glUniform4f(loc, a, b, c, d); }

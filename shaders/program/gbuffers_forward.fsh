@@ -18,6 +18,8 @@
 #include "/lib/spaces.glsl"
 #define SHADOW_TAPS 1
 #include "/lib/shadows.glsl"
+#include "/lib/water.glsl"
+#include "/lib/fog.glsl"
 
 uniform sampler2D gtexture;
 uniform float alphaTestRef;
@@ -79,6 +81,12 @@ void main() {
         lit = albedo;
     #endif
 
+    #if defined FW_LIT || defined FW_WEATHER || defined FW_UNLIT
+        lit = applyAirFog(lit, playerPos);
+        #ifndef WATER_DEFERRED
+            lit = applyUnderwaterFog(lit, length(playerPos));
+        #endif
+    #endif
     outScene = vec4(lit, col.a);
     outAlbedo = vec4(col.rgb, col.a);
     #ifdef FW_BASIC

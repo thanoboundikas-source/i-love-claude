@@ -22,6 +22,7 @@
 #include "/lib/spaces.glsl"
 #include "/lib/clouds.glsl"
 #include "/lib/water.glsl"
+#include "/lib/fog.glsl"
 #define SHADOW_TAPS 2
 #include "/lib/shadows.glsl"
 
@@ -81,6 +82,7 @@ void main() {
             vec3 col = mix(deep, refl, f);
             col += directLight * directShadow(geoN, light.y) * sunGlint(n, v, lightDir);
             col += srgbToLinear(glcolor.rgb) * blockLightCurve(light.x) * TORCH_COLOR * 0.15;
+            col = applyAirFog(col, playerPos);
             col = applyUnderwaterFog(col, dist);
             outScene = vec4(col, mix(0.60, 1.0, f));
             outData = packTranslucent(n, glcolor.rgb, light.y, MAT_WATER);
@@ -101,6 +103,10 @@ void main() {
     s.emissive = emissiveMask(col.rgb, emission, false);
     s.flags = 0;
     vec3 lit = shadeSurface(s, directShadow(geoN, light.y), vec3(0.0), 0.0);
+    lit = applyAirFog(lit, playerPos);
+    #ifndef WATER_DEFERRED
+        lit = applyUnderwaterFog(lit, dist);
+    #endif
 
     outScene = vec4(lit, col.a);
     outData = packTranslucent(geoN, glcolor.rgb, light.y, MAT_GLASS);
