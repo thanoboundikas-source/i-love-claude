@@ -1,15 +1,17 @@
 /*
-    Shared uniforms (matrices, time, weather, camera). Samplers are NOT here —
-    each program declares only the samplers it actually reads, so Iris never
-    sees stray shadow/colortex references it would act on.
+    Shared uniforms (matrices, time, weather, camera). Samplers are NOT here:
+    each program declares only the samplers it reads, so Iris never binds or
+    enables things (like the shadow pass) because of a stray declaration.
 */
 
 uniform float viewWidth;
 uniform float viewHeight;
+uniform float aspectRatio;
 uniform float near;
 uniform float far;
 
 uniform int frameCounter;
+uniform float frameTime;
 uniform float frameTimeCounter;
 uniform int worldTime;
 uniform int worldDay;
@@ -31,6 +33,7 @@ uniform float blindness;
 uniform float darknessFactor;
 uniform float eyeAltitude;
 uniform float cloudHeight;
+uniform int biome_precipitation;
 
 uniform vec3 cameraPosition;
 uniform vec3 previousCameraPosition;
@@ -42,9 +45,7 @@ uniform mat4 gbufferProjectionInverse;
 uniform mat4 gbufferPreviousModelView;
 uniform mat4 gbufferPreviousProjection;
 uniform mat4 shadowModelView;
-uniform mat4 shadowModelViewInverse;
 uniform mat4 shadowProjection;
-uniform mat4 shadowProjectionInverse;
 
 uniform vec3 fogColor;
 uniform vec3 skyColor;

@@ -240,6 +240,11 @@ def lint_source(name, src, known_macros):
             bound = cm.group(2).strip()
             if not re.match(r"^[-+]?\d+(\.\d*)?$|^[A-Z_][A-Z0-9_]*$|^k[A-Z]\w*$", bound):
                 warnings.append(f"{name}: for-loop bound '{bound}' is not a literal/macro/kConst (dynamic loop bound?)")
+    # smoothstep(edge0, edge1, x) with edge0 >= edge1 is undefined in GLSL and
+    # Metal. Write 1.0 - smoothstep(edge1, edge0, x) instead.
+    for m in re.finditer(r"\bsmoothstep\s*\(\s*([-+]?\d*\.?\d+)\s*,\s*([-+]?\d*\.?\d+)\s*,", code):
+        if float(m.group(1)) >= float(m.group(2)):
+            errors.append(f"{name}: smoothstep({m.group(1)}, {m.group(2)}, ...) has edge0 >= edge1 (undefined on Apple GPUs)")
     # #ifdef on names nothing defines = probably a typo
     for m in re.finditer(r"#\s*(?:ifdef|ifndef)\s+(\w+)|defined\s*\(?\s*(\w+)", code):
         n = m.group(1) or m.group(2)
@@ -247,11 +252,19 @@ def lint_source(name, src, known_macros):
             warnings.append(f"{name}: #ifdef on unknown macro '{n}' (typo?)")
 
 
-def collect_defines(all_files):
+def collect_defines(all_files, option_names):
     names = set(k for k, _ in IRIS_MACROS)
     for f in all_files:
-        for m in re.finditer(r"#\s*define\s+(\w+)", open(f, encoding="utf-8").read()):
+        text = open(f, encoding="utf-8").read()
+        for m in re.finditer(r"#\s*define\s+(\w+)", text):
             names.add(m.group(1))
+        # Iris makes any value-less "#define X" that is tested with #ifdef a
+        # menu option. Internal macros must carry a value.
+        for n, line in enumerate(text.splitlines(), 1):
+            m = re.match(r"^\s*#\s*define\s+(\w+)\s*$", line)
+            if m and m.group(1) not in option_names:
+                errors.append(f"{rel(f)}:{n}: '#define {m.group(1)}' has no value -> Iris would show it as a menu "
+                              f"option. Write '#define {m.group(1)} 1'.")
     return names
 
 
@@ -323,7 +336,7 @@ def main():
     profiles = check_properties(bools, values, consts)
 
     all_src = [os.path.join(dp, f) for dp, _, fs in os.walk(SHADERS) for f in fs if f.endswith((".glsl", ".vsh", ".fsh"))]
-    known = collect_defines(all_src)
+    known = collect_defines(all_src, set(bools) | set(values) | set(consts))
 
     # Configurations: defaults, each profile, all toggles off, all on, each
     # toggle flipped alone, and each value option at its min and max.

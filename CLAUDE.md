@@ -75,6 +75,15 @@ not show Iris INFO lines such as "Using shaderpack".
 - Iris patcher rule: never name identifiers starting with `iris_`, `irisMain`
   or `moj_import`.
 - colortex0–3 cannot be *read* in gbuffers programs (they sample the atlas).
+- Internal helper macros must carry a value (`#define GB_TERRAIN 1`). Iris
+  turns any value-less `#define X` that is tested with `#ifdef` into a menu
+  option (OptionAnnotatedSource). check.sh fails on this.
+- Never write `smoothstep(a, b, x)` with a >= b (undefined in GLSL/Metal).
+  Use `1.0 - smoothstep(b, a, x)`. check.sh fails on this.
+- Comments in shaders.properties start with `# ` (hash + space): Iris runs a C
+  preprocessor over it, so `#word` can be read as a directive.
+- Program stubs in `shaders/`, `shaders/nether/`, `shaders/end/` are generated
+  by `tools/gen_stubs.py`; edit the table there, put code in `shaders/program/`.
 
 ## The look (target spec)
 

@@ -1,14 +1,3 @@
 #version 330 compatibility
 
-// Sun and moon textures.
-
-#include "/lib/settings.glsl"
-
-out vec2 texcoord;
-out vec4 glcolor;
-
-void main() {
-    gl_Position = ftransform();
-    texcoord = (gl_TextureMatrix[0] * gl_MultiTexCoord0).xy;
-    glcolor  = gl_Color;
-}
+#include "/program/gbuffers_sky.vsh"
