@@ -268,6 +268,104 @@ def collect_defines(all_files, option_names):
     return names
 
 
+
+# ------------------------------------------------------- Apple GL compiler ---
+# Second opinion from Apple's real driver (OpenGL 4.1 Metal, same as the game).
+# Iris converts compatibility-profile code to core before compiling; we do the
+# same for the handful of legacy built-ins Solstice uses, then compile + link
+# in an offscreen context with tools/applegl.c.
+APPLEGL_SRC = os.path.join(ROOT, "tools", "applegl.c")
+APPLEGL_BIN = os.path.join(ROOT, "tools", ".applegl")
+
+CORE_VERTEX_DECLS = [
+    "in vec3 solPosition;", "in vec4 solColor;", "in vec2 solUV0;", "in ivec2 solUV2;", "in vec3 solNormal;",
+    "uniform mat4 solModelView;", "uniform mat4 solProjection;", "uniform mat3 solNormalMatrix;",
+    "uniform mat4 solTexMat0;", "uniform mat4 solTexMat1;",
+]
+CORE_REPLACEMENTS = [
+    (r"\bftransform\s*\(\s*\)", "(solProjection * solModelView * vec4(solPosition, 1.0))"),
+    (r"\bgl_ModelViewProjectionMatrix\b", "(solProjection * solModelView)"),
+    (r"\bgl_ModelViewMatrix\b", "solModelView"),
+    (r"\bgl_ProjectionMatrix\b", "solProjection"),
+    (r"\bgl_NormalMatrix\b", "solNormalMatrix"),
+    (r"\bgl_TextureMatrix\s*\[\s*0\s*\]", "solTexMat0"),
+    (r"\bgl_TextureMatrix\s*\[\s*1\s*\]", "solTexMat1"),
+    (r"\bgl_Vertex\b", "vec4(solPosition, 1.0)"),
+    (r"\bgl_Color\b", "solColor"),
+    (r"\bgl_MultiTexCoord0\b", "vec4(solUV0, 0.0, 1.0)"),
+    (r"\bgl_MultiTexCoord[12]\b", "vec4(vec2(solUV2), 0.0, 1.0)"),
+    (r"\bgl_Normal\b", "solNormal"),
+]
+
+
+def to_core(lines, stage):
+    """lines: list of (text, origin) after macro injection. Returns same shape."""
+    out = []
+    for text, origin in lines:
+        t = text
+        if t.strip() == "#version 330 compatibility":
+            out.append(("#version 330 core", origin))
+            continue
+        for pat, rep in CORE_REPLACEMENTS:
+            t = re.sub(pat, rep, t)
+        out.append((t, origin))
+    if stage == "vert":
+        # after the #version line and the macro block
+        i = next(k for k, (t, _) in enumerate(out) if t.startswith("#version"))
+        while i + 1 < len(out) and out[i + 1][1] == "<iris macro>":
+            i += 1
+        out = out[: i + 1] + [(d, "<core decls>") for d in CORE_VERTEX_DECLS] + out[i + 1:]
+    return out
+
+
+def build_applegl():
+    if os.path.exists(APPLEGL_BIN) and os.path.getmtime(APPLEGL_BIN) >= os.path.getmtime(APPLEGL_SRC):
+        return True
+    r = subprocess.run(["clang", "-O1", "-Wno-deprecated-declarations", "-framework", "OpenGL",
+                        APPLEGL_SRC, "-o", APPLEGL_BIN], capture_output=True, text=True)
+    if r.returncode != 0:
+        warnings.append("could not build tools/applegl.c (Apple GL check skipped): " + r.stderr[:300])
+        return False
+    return True
+
+
+def run_applegl(jobs, tmp):
+    """jobs: list of (label, vpath, fpath, vmap, fmap, cname). Returns failures dict."""
+    listfile = os.path.join(tmp, "applegl.list")
+    with open(listfile, "w") as f:
+        for i, (label, vp, fp, _, _, _) in enumerate(jobs):
+            f.write(f"{i}\t{vp}\t{fp}\n")
+    r = subprocess.run([APPLEGL_BIN, listfile], capture_output=True, text=True)
+    out = r.stdout + r.stderr
+    fails, warns = {}, {}
+    blocks = re.split(r"^### ", out, flags=re.M)
+    summary = ""
+    for b in blocks:
+        if not b.strip():
+            continue
+        if b.startswith("applegl:"):
+            summary = b.strip()
+            continue
+        head, _, body = b.partition("\n")
+        kind, idx = head.split()[0], int(head.split()[1])
+        label, vp, fp, vmap, fmap, cname = jobs[idx]
+        mapped = []
+        section = None
+        for l in body.splitlines():
+            m = re.match(r"^\[(vertex|fragment|link)\] ?(.*)$", l)
+            if m:
+                section, l = m.group(1), m.group(2)
+            if not l.strip():
+                continue
+            mm = re.match(r"^(ERROR|WARNING): 0:(\d+): (.*)$", l)
+            lm = vmap if section == "vertex" else fmap
+            if mm and lm and 1 <= int(mm.group(2)) <= len(lm):
+                l = f"{mm.group(1)}: {lm[int(mm.group(2)) - 1]}: {mm.group(3)}"
+            mapped.append(f"  [{section}] {l}")
+        msg = "\n".join(mapped)
+        (fails if kind == "FAIL" else warns).setdefault((label, msg), []).append(cname)
+    return fails, warns, summary
+
 # ------------------------------------------------------------------- main ---
 def programs():
     found = {}
@@ -366,13 +464,15 @@ def main():
             errors.append(f"{key}: needs both .vsh and .fsh (has {sorted(stages)})")
 
     tmp = tempfile.mkdtemp(prefix="solstice-check-")
+    use_apple = "--no-apple" not in sys.argv and build_applegl()
+    apple_jobs = []
     seen = {}
     compiled = 0
     failures = {}
     for cname, cb, cv in configs:
         overrides = {SETTINGS_REL: apply_config(settings_text, cb, cv)}
         for key, stages in sorted(progs.items()):
-            files, srcs, maps = [], [], []
+            files, srcs, maps, full_lines = [], [], [], []
             for ext in (".vsh", ".fsh"):
                 if ext not in stages:
                     continue
@@ -384,6 +484,7 @@ def main():
                 lines = inject_macros(lines, [])
                 srcs.append("\n".join(t for t, _ in lines) + "\n")
                 maps.append([o for _, o in lines])
+                full_lines.append(lines)
             if len(srcs) != 2:
                 continue
             h = hashlib.sha1("\0".join(srcs).encode()).hexdigest()
@@ -402,11 +503,31 @@ def main():
                     lint_source(f"{key}{ext}", src, known)
             rc, out = run_glslang(files)
             compiled += 1
+            if use_apple:
+                cfiles, cmaps = [], []
+                for ext, lm_lines in zip((".vsh", ".fsh"), full_lines):
+                    stage = STAGES[ext]
+                    core = to_core(lm_lines, stage)
+                    cp = os.path.join(tmp, f"{safe}.{h[:8]}.core.{stage}")
+                    open(cp, "w").write("\n".join(t for t, _ in core) + "\n")
+                    cfiles.append(cp)
+                    cmaps.append([o for _, o in core])
+                apple_jobs.append((key, cfiles[0], cfiles[1], cmaps[0], cmaps[1], cname))
             if rc != 0:
                 out = map_errors(out, file_maps)
                 msg = "\n".join(l for l in out.splitlines() if l.strip() and not l.startswith(tmp) and "No code generated" not in l and not l.endswith(tmp))
                 msg = msg.replace(tmp + "/", "")
                 failures.setdefault((key, msg), []).append(cname)
+
+    apple_summary = "Apple GL check skipped"
+    if use_apple and apple_jobs:
+        afails, awarns, apple_summary = run_applegl(apple_jobs, tmp)
+        for (key, msg), cnames in sorted(afails.items()):
+            shown = ", ".join(cnames[:6]) + (f" (+{len(cnames) - 6} more)" if len(cnames) > 6 else "")
+            errors.append(f"[Apple GL] {key} fails in [{shown}]:\n{msg}")
+        for (key, msg), cnames in sorted(awarns.items()):
+            if "--apple-warnings" in sys.argv:
+                warnings.append(f"[Apple GL] {key} warnings:\n{msg}")
 
     for (key, msg), cnames in sorted(failures.items()):
         shown = ", ".join(cnames[:6]) + (f" (+{len(cnames) - 6} more)" if len(cnames) > 6 else "")
@@ -420,6 +541,7 @@ def main():
         print("ERROR", e)
     print(f"\n{len(progs)} programs, {len(configs)} option configs, {compiled} unique compiles, "
           f"{len(errors)} errors, {len(uniq_w)} warnings")
+    print(apple_summary)
     return 1 if errors else 0
 
 

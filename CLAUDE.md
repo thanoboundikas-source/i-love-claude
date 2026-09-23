@@ -33,10 +33,16 @@ profile rebinds Iris reload to I.) The `fullbrightnesstoggle` mod is installed
 ## Tools (run these yourself, never ask Chris to describe errors)
 
 - `./check.sh` — expands includes like Iris, injects Iris macros, and runs
-  every program through `glslangValidator` in several option configurations
-  (defaults, every toggle off, each toggle off alone, each profile). Run it
-  after **every** change and fix everything it reports. It is a typo catcher,
-  not proof — Apple's GL compiler and the Iris patcher are the real test.
+  every program through `glslangValidator` in ~65 option configurations
+  (defaults, each profile, all toggles off/on, each toggle flipped, each value
+  option at its extremes). Then it converts each program to core profile (the
+  way the Iris patcher does for the legacy built-ins we use) and compiles +
+  links it with **Apple's own OpenGL 4.1 Metal driver** in an offscreen
+  context (`tools/applegl.c`, built automatically) — the same compiler the
+  game uses. Run it after **every** change and fix everything it reports.
+  `--no-apple` skips the Apple stage, `--apple-warnings` shows driver warnings.
+  It is a strong typo catcher, not proof: the real Iris patcher and runtime
+  behaviour are only tested in-game.
 - `./tools/gamelog.sh` — prints Iris/shader errors and link warnings from the
   newest game log (`latest.log`). Run it after Chris reloads shaders.
   `./tools/gamelog.sh --all` shows the whole shader-related log section.
