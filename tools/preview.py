@@ -80,6 +80,84 @@ def read_png_gray1(data):
     return np.stack([g, g, g, np.full_like(g, 255)], -1)
 
 
+def read_png_rgba(data):
+    """General 8-bit PNG decoder (grey, RGB, palette, grey+alpha, RGBA)."""
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    pos, idat, pal, trns = 8, b"", None, None
+    while pos < len(data):
+        n = struct.unpack(">I", data[pos:pos + 4])[0]
+        t = data[pos + 4:pos + 8]
+        d = data[pos + 8:pos + 8 + n]
+        if t == b"IHDR":
+            w, h, bd, ct = struct.unpack(">IIBB", d[:10])
+        elif t == b"PLTE":
+            pal = np.frombuffer(d, np.uint8).reshape(-1, 3)
+        elif t == b"tRNS":
+            trns = np.frombuffer(d, np.uint8)
+        elif t == b"IDAT":
+            idat += d
+        pos += 12 + n
+    if bd not in (1, 2, 4, 8):
+        raise ValueError(f"bit depth {bd} not supported")
+    ch = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[ct]
+    raw = zlib.decompress(idat)
+    stride = (w * ch * bd + 7) // 8
+    bpp = max(1, ch * bd // 8)
+    rows = []
+    prev = [0] * stride
+    for y in range(h):
+        f = raw[y * (stride + 1)]
+        line = list(raw[y * (stride + 1) + 1:(y + 1) * (stride + 1)])
+        cur = [0] * stride
+        for i in range(stride):
+            a = cur[i - bpp] if i >= bpp else 0
+            b = prev[i]
+            c = prev[i - bpp] if i >= bpp else 0
+            x = line[i]
+            if f == 1: x += a
+            elif f == 2: x += b
+            elif f == 3: x += (a + b) // 2
+            elif f == 4:
+                pp = a + b - c
+                pa, pb, pc = abs(pp - a), abs(pp - b), abs(pp - c)
+                x += a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+            cur[i] = x & 255
+        rows.append(cur)
+        prev = cur
+    arr = np.array(rows, np.uint8)
+    if bd < 8:
+        bits = np.unpackbits(arr, axis=1).reshape(h, -1, bd)
+        vals = np.zeros(bits.shape[:2], np.uint8)
+        for k in range(bd):
+            vals = (vals << 1) | bits[..., k]
+        px = vals[:, :w * ch].reshape(h, w, ch)
+        if ct == 0:
+            px = (px.astype(np.int32) * 255 // ((1 << bd) - 1)).astype(np.uint8)
+    else:
+        px = arr.reshape(h, w, ch)
+    if ct == 3:
+        rgb = pal[px[..., 0]]
+        alpha = np.full((h, w), 255, np.uint8)
+        if trns is not None:
+            ta = np.full(256, 255, np.uint8); ta[:len(trns)] = trns
+            alpha = ta[px[..., 0]]
+        return np.dstack([rgb, alpha])
+    if ct == 0: return np.dstack([px[..., 0]] * 3 + [np.full((h, w), 255, np.uint8)])
+    if ct == 4: return np.dstack([px[..., 0]] * 3 + [px[..., 1]])
+    if ct == 2: return np.dstack([px, np.full((h, w), 255, np.uint8)])
+    return px
+
+
+def vanilla_texture_raw(tmp, name):
+    import zipfile
+    with zipfile.ZipFile(VANILLA_JAR) as z:
+        data = z.read(f"assets/minecraft/textures/block/{name}.png")
+    rgba = read_png_rgba(data)[:16]          # first animation frame
+    p = os.path.join(tmp, f"{name}.raw")
+    open(p, "wb").write(np.ascontiguousarray(rgba).tobytes())
+    return p, rgba.shape[1], rgba.shape[0]
+
+
 def vanilla_clouds_raw(tmp):
     import zipfile
     with zipfile.ZipFile(VANILLA_JAR) as z:
@@ -429,6 +507,69 @@ def contact_sheet(body_color, extra, name, w=480, h=270, presets=PRESETS, textur
     return out
 
 
+
+PBR_BODY = r"""#version 330 compatibility
+#include "/lib/settings.glsl"
+#include "/lib/uniforms.glsl"
+#include "/lib/common.glsl"
+#include "/lib/spaces.glsl"
+#include "/lib/encoding.glsl"
+#include "/lib/sky.glsl"
+#include "/lib/lighting.glsl"
+#include "/lib/tonemap.glsl"
+#include "/lib/pbr.glsl"
+uniform sampler2D gtexture;
+uniform int useNormals;
+uniform int isMetal;
+in vec2 texcoord;
+layout(location = 0) out vec4 outColor;
+void main() {
+    initSky();
+    // A flat floor seen from above at an angle; UV tiles the 16x16 texture 3x.
+    vec3 viewPos = screenToView(texcoord, 0.5);
+    vec3 dir = normalize(viewDirToWorld(viewPos));
+    float t = (60.0 - cameraPosition.y) / dir.y;
+    vec3 p = cameraPosition + dir * t;
+    vec2 uv = fract(p.xz / 1.0);
+    vec3 alb = texture(gtexture, uv).rgb;
+    vec3 n = vec3(0.0, 1.0, 0.0);
+    float contrast = 0.0;
+    if (useNormals == 1) n = generatedNormal(gtexture, uv, vec2(0.5), vec2(0.5), n, vec3(1.0, 0.0, 0.0), vec3(0.0, 0.0, 1.0), 4.0, contrast);
+    else { float c2; generatedNormal(gtexture, uv, vec2(0.5), vec2(0.5), n, vec3(1.0,0.0,0.0), vec3(0.0,0.0,1.0), 4.0, c2); contrast = c2; }
+    Surface s;
+    s.albedo = srgbToLinear(alb); s.normal = n; s.geoNormal = vec3(0.0, 1.0, 0.0);
+    s.light = vec2(0.0, 1.0); s.ao = 1.0; s.emissive = 0.0;
+    s.flags = isMetal == 1 ? FLAG_METAL : 0;
+    s.smoothness = generatedSmoothness(alb, contrast, isMetal == 1);
+    vec3 c = shadeSurface(s, vec3(1.0), vec3(0.0), 0.0);
+    if (s.smoothness > 0.01) c += specularLighting(s, -dir, vec3(1.0));
+    outColor = vec4(linearToSrgb(tonemapSolstice(c)), 1.0);
+}
+"""
+
+
+def pbr_sheet():
+    build_bin()
+    tmp = tempfile.mkdtemp(prefix="solstice-preview-")
+    frag = shader_from_template(PBR_BODY, tmp)
+    rows = []
+    for tex, metal in (("cobblestone", 0), ("stone", 0), ("oak_planks", 0), ("iron_block", 1), ("white_concrete", 0)):
+        p, tw, th = vanilla_texture_raw(tmp, tex)
+        row = []
+        for normals in (0, 1):
+            sun_angle = 0.04   # low morning sun: bumps show clearly
+            fwd = np.array([0.6, -0.8, 0.2])
+            u = base_uniforms(sun_angle, fwd, 320, 200, cam_y=62.5) + [
+                f"t gtexture 0 {tw} {th} {p}", f"i useNormals {normals}", f"i isMetal {metal}", "i2 atlasSize 16 16"]
+            row.append(render(frag, 320, 200, u, tmp))
+        rows.append(np.concatenate(row, 1))
+        print("  rendered", tex)
+    out = os.path.join(ROOT, "previews", "pbr.png")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    write_png(out, np.concatenate(rows, 0))
+    print("wrote", out, "| left = flat, right = generated normals; rows: cobblestone, stone, oak planks, iron block, white concrete")
+
+
 if __name__ == "__main__":
     scene = sys.argv[1] if len(sys.argv) > 1 else "sky"
     cloud_presets = [p for p in PRESETS if p[0] in ("noon", "morning", "sunset", "dusk", "night", "rain noon")]
@@ -454,6 +595,8 @@ if __name__ == "__main__":
         pres = [p for p in PRESETS if p[0] in ("noon", "morning", "sunset", "night")]
         contact_sheet("previewLake(dir)", CLOUD_EXTRA + extra, "lake", presets=pres,
                       textures=[("cloudTex", 0)], cam_y=69.0, cam_xz=(-2.0, 2.0), look_at=(-18.0, 62.0, 18.0))
+    elif scene == "pbr":
+        pbr_sheet()
     elif scene == "clouds_flat":
         contact_sheet("previewClouds(dir)", "#define PREVIEW_FLAT 1\n" + CLOUD_EXTRA, "clouds_flat",
                       presets=cloud_presets, textures=[("cloudTex", 0)], pitch=18.0, cam_y=90.0)

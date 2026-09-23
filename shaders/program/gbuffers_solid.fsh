@@ -11,6 +11,7 @@
 #include "/lib/common.glsl"
 #include "/lib/encoding.glsl"
 #include "/lib/material.glsl"
+#include "/lib/pbr.glsl"
 
 uniform sampler2D gtexture;
 uniform float alphaTestRef;
@@ -25,6 +26,11 @@ in vec3 normalW;
 #ifdef GB_TERRAIN
     flat in int blockId;
     flat in float emission;
+    flat in vec2 spriteMid;
+    flat in vec2 spriteHalf;
+    in vec3 tangentW;
+    flat in float tangentSign;
+    in float viewDist;
 #endif
 
 #ifdef GB_DAMAGE
@@ -84,6 +90,18 @@ void main() {
         #endif
 
         vec3 n = normalize(normalW);
+
+        #if defined GB_TERRAIN && (defined GENERATED_NORMALS || defined GENERATED_SPECULAR)
+            if ((flags & FLAG_SSS) == 0 && emissive < 0.5) {
+                vec3 t = normalize(tangentW - n * dot(tangentW, n));
+                vec3 b = cross(t, n) * tangentSign;
+                float contrast;
+                n = generatedNormal(gtexture, texcoord, spriteMid, spriteHalf, n, t, b, viewDist, contrast);
+                bool metal = blockId == ID_METAL;
+                smoothness = generatedSmoothness(albedo, contrast, metal);
+                if (metal && smoothness > 0.0) flags |= FLAG_METAL;
+            }
+        #endif
 
         outAlbedo = vec4(albedo, ao);
         outData = packOpaque(n, light, smoothness, emissive, flags);

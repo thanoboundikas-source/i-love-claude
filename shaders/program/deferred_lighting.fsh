@@ -119,6 +119,7 @@ void main() {
             #endif
 
             color = shadeSurface(s, shadow, tint, tintWeight);
+            if (s.smoothness > 0.01) color += specularLighting(s, normalize(-playerPos), shadow);
         }
         if (!isHand) color = applyAirFog(color, playerPos);
     }

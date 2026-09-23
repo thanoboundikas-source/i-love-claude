@@ -97,7 +97,42 @@ vec3 shadeSurface(Surface s, vec3 shadow, vec3 blockTint, float blockTintWeight)
 
     vec3 block = blockLightColor(blockTint, blockTintWeight) * blockLightCurve(s.light.x) * mix(1.0, s.ao, 0.7);
 
-    vec3 lit = s.albedo * (direct + ambient + block + ambientFloor() * s.ao);
+    // Metals reflect most of their light specularly; keep some diffuse so
+    // iron and gold blocks still read as their colour indoors.
+    vec3 diffuseAlbedo = (s.flags & FLAG_METAL) != 0 ? s.albedo * 0.6 : s.albedo;
+    vec3 lit = diffuseAlbedo * (direct + ambient + block + ambientFloor() * s.ao);
     lit += s.albedo * s.emissive * 4.0;
     return lit;
+}
+
+// Specular: a GGX sun/moon highlight plus a cheap sky reflection on smooth
+// surfaces (wet ground in rain, metal, polished blocks). v = direction to the
+// camera. Only called when smoothness > 0.
+vec3 specularLighting(Surface s, vec3 v, vec3 shadow) {
+    float rough = max(1.0 - s.smoothness, 0.12);
+    float a = rough * rough;
+    float a2 = a * a;
+    bool metal = (s.flags & FLAG_METAL) != 0;
+    vec3 f0 = metal ? s.albedo : vec3(0.04);
+
+    vec3 n = s.normal;
+    float ndv = saturate(dot(n, v));
+    vec3 h = normalize(v + lightDir);
+    float ndh = saturate(dot(n, h));
+    float ndl = saturate(dot(n, lightDir));
+    float vdh = saturate(dot(v, h));
+    float d = ndh * ndh * (a2 - 1.0) + 1.0;
+    float D = a2 / (PI * d * d);
+    float k = a * 0.5;
+    float G = (ndl / (ndl * (1.0 - k) + k)) * (ndv / (ndv * (1.0 - k) + k));
+    vec3 F = f0 + (1.0 - f0) * pow5(1.0 - vdh);
+    vec3 sun = directLight * shadow * D * G * F / max(4.0 * ndv, 1e-3);
+
+    // Sky reflection, weakened for rough surfaces and where the sky is hidden.
+    vec3 r = reflect(-v, n);
+    vec3 envF = f0 + (max(vec3(1.0 - rough), f0) - f0) * pow5(1.0 - ndv);
+    vec3 env = skyGradient(vec3(r.x, abs(r.y), r.z)) * (r.y < 0.0 ? 0.35 : 1.0);
+    env *= envF * s.smoothness * s.smoothness * skyLightCurve(s.light.y);
+
+    return min(sun, vec3(40.0)) + env;
 }

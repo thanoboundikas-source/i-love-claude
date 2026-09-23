@@ -21,8 +21,15 @@ out vec3 normalW;
 #ifdef GB_TERRAIN
     in vec2 mc_Entity;
     in vec4 at_midBlock;
+    in vec2 mc_midTexCoord;
+    in vec4 at_tangent;
     flat out int blockId;
     flat out float emission;
+    flat out vec2 spriteMid;
+    flat out vec2 spriteHalf;
+    out vec3 tangentW;
+    flat out float tangentSign;
+    out float viewDist;
 #endif
 
 void main() {
@@ -35,5 +42,13 @@ void main() {
     #ifdef GB_TERRAIN
         blockId  = int(mc_Entity.x + 0.5);
         emission = clamp(at_midBlock.w / 15.0, 0.0, 1.0);
+        // Sprite bounds in the atlas: every corner of a quad is half a sprite
+        // away from its centre, and flat varyings keep one corner's value.
+        vec2 midUV = (gl_TextureMatrix[0] * vec4(mc_midTexCoord, 0.0, 1.0)).xy;
+        spriteMid  = midUV;
+        spriteHalf = abs(texcoord - midUV);
+        tangentW   = mat3(gbufferModelViewInverse) * normalize(gl_NormalMatrix * at_tangent.xyz);
+        tangentSign = at_tangent.w < 0.0 ? -1.0 : 1.0;
+        viewDist   = length((gl_ModelViewMatrix * gl_Vertex).xyz);
     #endif
 }

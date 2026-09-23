@@ -250,3 +250,25 @@ are preserved in git history, commit d1cb592.)
     range (no halos), strength 0.6 x SHARPEN_AMOUNT.
 59. **No vignette, no chromatic aberration, no film grain, no lens flare** —
     not in the spec and they work against "clean". Vanilla vignette is off.
+
+## Generated PBR
+
+60. **Normals are edge bevels, not per-texel tilts.** Brightness = height;
+    each texel keeps a flat middle and its outer 28% bevels toward the
+    neighbour's height. The first version (one gradient per texel) looked
+    like noise in the preview renderer; bevels read as raised/sunken pixels —
+    cobblestone stones, brick mortar, plank grooves — which suits pixel art
+    and stays vanilla-faithful. Neighbours wrap inside the block's own sprite
+    (bounds from `mc_midTexCoord`), so no bleeding from the next atlas tile.
+    Strength fades out between 10 and 36 blocks: no distant sparkle.
+    Terrain only; plants/leaves and glowing blocks are skipped.
+61. **Specular from stable cues only**: metal blocks (block.properties ID 20)
+    get smoothness 0.55-0.85 with coloured (albedo) F0 and reduced diffuse;
+    flat, low-contrast bright textures (concrete, quartz, polished stone) get
+    up to 0.30; everything else is matte. Rain gloss (wet look) comes on top.
+    Guessing more materials from colour alone produced plastic-looking grass
+    and dirt in tests, so it doesn't.
+62. **Specular lighting**: GGX sun/moon highlight (clamped to avoid fireflies)
+    plus a sky-gradient reflection weighted by smoothness² and sky light —
+    enough for wet ground, iron and polished stone without SSR on every
+    surface (which the spec does not ask for and the frame budget can't pay).
