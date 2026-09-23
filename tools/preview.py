@@ -198,6 +198,7 @@ SKY_BODY = r'''#version 330 compatibility
 #include "/lib/spaces.glsl"
 #include "/lib/sky.glsl"
 #include "/lib/tonemap.glsl"
+#include "/lib/clouds.glsl"
 PREVIEW_EXTRA
 in vec2 texcoord;
 layout(location = 0) out vec4 outColor;
@@ -223,7 +224,23 @@ PRESETS = [
 ]
 
 
-def contact_sheet(body_color, extra, name, w=480, h=270, presets=PRESETS, textures=()):
+CLOUD_EXTRA = r'''
+vec3 previewClouds(vec3 dir) {
+    vec3 col = skyColorFull(dir);
+    vec3 origin = cameraPosition;
+    float hd;
+#ifdef PREVIEW_FLAT
+    vec4 c = flatClouds(origin, dir, 1e6, hd);
+#else
+    vec4 c = traceClouds(origin, dir, 1e6, hd);
+#endif
+    c = fadeClouds(c, dir, hd);
+    return col * (1.0 - c.a) + c.rgb;
+}
+'''
+
+
+def contact_sheet(body_color, extra, name, w=480, h=270, presets=PRESETS, textures=(), pitch=8.0, cam_y=80.0, fov=70.0):
     build_bin()
     tmp = tempfile.mkdtemp(prefix="solstice-preview-")
     body = SKY_BODY.replace("PREVIEW_COLOR", body_color).replace("PREVIEW_EXTRA", extra)
@@ -237,8 +254,8 @@ def contact_sheet(body_color, extra, name, w=480, h=270, presets=PRESETS, textur
     for label, angle, rain, thunder in presets:
         row = []
         for toward in (True, False):
-            fwd = azimuth_forward(angle, toward)
-            u = base_uniforms(angle, fwd, w, h, rain, thunder) + tex_lines
+            fwd = azimuth_forward(angle, toward, pitch)
+            u = base_uniforms(angle, fwd, w, h, rain, thunder, cam_y=cam_y, fov=fov) + tex_lines
             row.append(render(frag, w, h, u, tmp))
         rows.append(np.concatenate(row, 1))
         print(f"  rendered {label}")
@@ -253,7 +270,17 @@ def contact_sheet(body_color, extra, name, w=480, h=270, presets=PRESETS, textur
 
 if __name__ == "__main__":
     scene = sys.argv[1] if len(sys.argv) > 1 else "sky"
+    cloud_presets = [p for p in PRESETS if p[0] in ("noon", "morning", "sunset", "dusk", "night", "rain noon")]
     if scene == "sky":
         contact_sheet("skyColorFull(dir)", "", "sky")
+    elif scene == "clouds":
+        contact_sheet("previewClouds(dir)", CLOUD_EXTRA, "clouds", presets=cloud_presets,
+                      textures=[("cloudTex", 0)], pitch=18.0, cam_y=90.0)
+    elif scene == "clouds_above":
+        contact_sheet("previewClouds(dir)", CLOUD_EXTRA, "clouds_above", presets=cloud_presets,
+                      textures=[("cloudTex", 0)], pitch=-12.0, cam_y=225.0)
+    elif scene == "clouds_flat":
+        contact_sheet("previewClouds(dir)", "#define PREVIEW_FLAT 1\n" + CLOUD_EXTRA, "clouds_flat",
+                      presets=cloud_presets, textures=[("cloudTex", 0)], pitch=18.0, cam_y=90.0)
     else:
         print("unknown scene", scene)

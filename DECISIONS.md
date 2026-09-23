@@ -96,3 +96,43 @@ are preserved in git history, commit d1cb592.)
 22. **Tonemap maps midtones 1:1** and only rolls off above 0.55, applied to
     the brightest channel so saturation is preserved; hot highlights drift
     toward white. Saturation option defaults to 105%.
+
+## Clouds
+
+23. **The game's own `clouds.png` is the cloud map** (bound with Iris'
+    `customTexture` from `minecraft:textures/environment/clouds.png`, checked
+    in the Iris source). Shapes are therefore exactly vanilla's — it is the
+    vanilla asset, not code from another pack.
+24. **Blocky volumes by grid walk, not noise ray-marching.** Each 12x12 cell is
+    extruded to `CLOUD_THICKNESS` (default 8, vanilla is 4 — "thick" per the
+    spec) from the vanilla cloud height up. The ray visits each crossed cell
+    once (one texel fetch per cell, `CLOUD_STEPS` fixed), so cost is ~25 texel
+    reads per pixel at reduced resolution. Cheap, deterministic (nothing for
+    TAA to smear) and perfectly blocky.
+25. **Lit like solid objects.** Each cloud segment is shaded by the face the
+    ray entered through: sunlit tops, sun-facing sides, softly lit far sides
+    (0.2 wrap light for scattering), undersides lit by the horizon/sunset
+    colour. Two taps toward the sun darken faces shadowed by other clouds.
+    Crossing into a neighbouring cloud cell keeps the entry face, so no grid
+    lines appear inside a cloud (found and fixed with the preview renderer).
+26. **Soft edges come from optical depth**: a ray clipping a corner passes a
+    short distance through the cloud and is partly transparent (density 2.2
+    per block). Clearly blocky, slightly soft.
+27. **Distance**: clouds blend toward the sky colour behind them
+    (exp(-d/900)) and thin out between 1100 and 2400 blocks — no hard edge.
+28. **Drift speed 0.853 blocks/s** (vanilla ~0.6). Chosen so 3600 s of
+    `frameTimeCounter` (which Iris wraps hourly) moves exactly one texture
+    period (3072 blocks) — the wrap is invisible.
+29. **Volumetric pass runs at RENDER_SCALE** into a genuinely smaller buffer
+    (`size.buffer.colortex3`), picked with `#if RENDER_SCALE == …` in
+    shaders.properties. Upsampling artefacts are suppressed analytically:
+    terrain nearer than the cloud layer never receives clouds.
+30. **Rain darkens clouds** (x0.62, thunder x0.75 more) but does not change
+    coverage — vanilla's map has no rain variant and inventing one would be
+    an unrequested feature.
+31. **POTATO / 3D off gets a flat layer**, not nothing: 4 texel reads,
+    smooth-filtered, at mid-cloud height. The sky looks dead without clouds
+    and the cost is negligible. `CLOUDS` off removes clouds entirely.
+32. **Cloud shadows** project the surface along the light onto the middle of
+    the cloud layer and read the smooth coverage (12-block soft edge),
+    strength 55%, faded out in rain and at low sun.
