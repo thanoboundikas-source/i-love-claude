@@ -57,7 +57,9 @@ float moonPhaseBrightness() {
 void initSky() {
     sunDir  = normalize(mat3(gbufferModelViewInverse) * sunPosition);
     moonDir = normalize(mat3(gbufferModelViewInverse) * moonPosition);
-    lightDir = sunDir.y > -0.001 ? sunDir : moonDir;
+    // The light the shadow map was rendered from (sun by day, moon by night).
+    lightDir = normalize(mat3(gbufferModelViewInverse) * shadowLightPosition);
+    bool lightIsSun = dot(lightDir, sunDir) > 0.0;
     sunElev = sunDir.y;
 
     dayF    = smoothstep(-0.06, 0.22, sunElev);
@@ -83,7 +85,7 @@ void initSky() {
     float weatherDirect = mix(1.0, 0.12, rainF) * mix(1.0, 0.5, stormF);
     sunLight  = sunTint * sunI * weatherDirect;
     moonLight = MOON_COLOR * moonI * weatherDirect;
-    directLight = sunDir.y > -0.001 ? sunLight : moonLight;
+    directLight = lightIsSun ? sunLight : moonLight;
 
     // Sky (ambient) light: a bluish white by day, dusky at sunset, dim blue at
     // night. Overcast skies are dimmer but relatively brighter than the sun.
@@ -92,7 +94,7 @@ void initSky() {
     vec3 ambNight  = vec3(0.40, 0.52, 0.85) * 0.045;
     ambientLight = mix(ambNight, ambDay, dayF);
     ambientLight = mix(ambientLight, ambSunset, sunsetF * 0.7 * (1.0 - dayF * 0.5));
-    ambientLight = overcast(ambientLight, rainF * 0.7) * mix(1.0, 0.82, rainF) * mix(1.0, 0.7, stormF);
+    ambientLight = overcast(ambientLight, rainF * 0.7) * mix(1.0, 0.66, rainF) * mix(1.0, 0.7, stormF);
 }
 
 // ---------------------------------------------------------------- sky

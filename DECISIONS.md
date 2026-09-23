@@ -136,3 +136,38 @@ are preserved in git history, commit d1cb592.)
 32. **Cloud shadows** project the surface along the light onto the middle of
     the cloud layer and read the smooth coverage (12-block soft edge),
     strength 55%, faded out in rain and at low sun.
+
+## Lighting and shadows
+
+33. **Radial shadow distortion (0.8)**: ~5x texel density near the player,
+    coarser far away. Same function in shadow.vsh and every reader.
+34. **Acne**: normal offset scaled by the *local* world-space texel size
+    (derived from the distortion), larger on surfaces at grazing angles to the
+    light, plus a tiny depth bias. No constant world-space offset, so contact
+    shadows stay tight near the player.
+35. **Soft shadows = rotated Vogel-disk PCF on hardware 2x2 comparisons**
+    (4/8/16 taps POTATO-less/REGULAR/INSANE), penumbra ~0.08 blocks (option),
+    never below ~1.2 texels so far shadows don't alias. Rotation changes per
+    pixel and per frame; TAA resolves it. **No PCSS** (contact-hardening):
+    it needs raw depth reads next to hardware comparisons (a required feature
+    flag, extra blocker-search taps) — not worth the cost/risk on GL 4.1.
+36. **Light leaks**: direct light is multiplied by a sky-light guard
+    (smoothstep 0.03..0.30 of the lightmap sky level). Sealed caves have no sky
+    light, so no sun can leak in even where the shadow map is coarse.
+    Beyond the shadow distance the sky-light proxy takes over with a smooth
+    blend, no visible edge.
+37. **Coloured shadows**: shadowtex1 (opaque) gives the PCF result; one extra
+    shadowtex0 + shadowcolor0 tap tints light that passed a translucent
+    caster. Water is marked with alpha 0 in shadowcolor0 and only tints
+    lightly (it is clear); stained glass tints by its colour and opacity.
+    Deep underwater darkness comes from vanilla's sky light, which drops one
+    level per block of water.
+38. **lightDir comes from `shadowLightPosition`**, so the direct light always
+    matches the shadow map exactly (no mismatch around sunset).
+39. **Held item** uses the sky-light proxy at the player's eye instead of the
+    shadow map (its depth is fake and the player model would shadow it).
+40. **Particles get one shadow tap, glass two** — enough to stop them glowing
+    in shade, cheap enough for heavy particle scenes.
+41. **Low-light desaturation** in the tonemap (below ~0.06 luminance colour
+    fades 45% toward a slightly blue grey): nights and dark caves read as
+    night rather than dim daylight; lit areas are untouched.

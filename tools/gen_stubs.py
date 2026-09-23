@@ -14,6 +14,7 @@ SHADERS = os.path.join(ROOT, "shaders")
 
 # (folder, program name, vertex body, fragment body, variant define or None)
 OVERWORLD = [
+    ("shadow", "shadow", "shadow", None),
     ("gbuffers_terrain", "gbuffers_solid", "gbuffers_solid", "GB_TERRAIN"),
     ("gbuffers_block", "gbuffers_solid", "gbuffers_solid", "GB_BLOCK"),
     ("gbuffers_entities", "gbuffers_solid", "gbuffers_solid", "GB_ENTITY"),

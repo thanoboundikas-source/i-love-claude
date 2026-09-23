@@ -11,6 +11,9 @@
 #include "/lib/material.glsl"
 #include "/lib/sky.glsl"
 #include "/lib/lighting.glsl"
+#include "/lib/spaces.glsl"
+#define SHADOW_TAPS 2
+#include "/lib/shadows.glsl"
 
 uniform sampler2D gtexture;
 uniform float alphaTestRef;
@@ -45,7 +48,13 @@ void main() {
     s.smoothness = 0.0;
     s.emissive = emissiveMask(col.rgb, emission, false);
     s.flags = 0;
-    vec3 lit = shadeSurface(s, vec3(skyShadowProxy(light.y)), vec3(0.0), 0.0);
+    #ifdef SHADOWS
+        vec3 shadow = shadowVisibility(playerPos, n, ign(gl_FragCoord.xy)) * lightLeakGuard(light.y);
+        shadow = mix(shadow, vec3(skyShadowProxy(light.y)), shadowEdgeFade(playerToShadowClip(playerPos)));
+    #else
+        vec3 shadow = vec3(skyShadowProxy(light.y));
+    #endif
+    vec3 lit = shadeSurface(s, shadow, vec3(0.0), 0.0);
 
     bool isWater = blockId == ID_WATER;
     outScene = vec4(lit, isWater ? max(col.a, 0.55) : col.a);

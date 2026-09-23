@@ -19,6 +19,14 @@ float shoulderCurve(float x) {
 
 vec3 tonemapSolstice(vec3 hdr) {
     hdr = max(hdr, vec3(0.0)) * (float(EXPOSURE) * 0.01);
+
+    // Low-light desaturation (like the eye at night): very dark areas lose
+    // some colour and lean slightly blue, so moonlit grass reads as night and
+    // not as dim daylight. Lit areas are untouched.
+    float lum = luminance(hdr);
+    float dim = 1.0 - smoothstep(0.004, 0.06, lum);
+    hdr = mix(hdr, vec3(lum) * vec3(0.86, 0.95, 1.12), dim * 0.45);
+
     float peak = max(max(hdr.r, hdr.g), hdr.b);
     if (peak <= 1e-6) return vec3(0.0);
     float mapped = shoulderCurve(peak);

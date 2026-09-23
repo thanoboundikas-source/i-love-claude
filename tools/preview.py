@@ -160,7 +160,8 @@ def render(frag, w, h, uniforms, tmp):
     return img[::-1].copy()
 
 
-def base_uniforms(sun_angle, forward, w, h, rain=0.0, thunder=0.0, moon_phase=0, t=100.0, cam_y=80.0, fov=70.0):
+def base_uniforms(sun_angle, forward, w, h, rain=0.0, thunder=0.0, moon_phase=0, t=100.0, cam_y=80.0, fov=70.0,
+                  cam_xz=(0.0, 0.0)):
     sun = celestial_sun_dir(sun_angle, -30.0)
     mv, mvi = look_matrices(np.array(forward, float))
     proj = perspective(fov, w / h)
@@ -170,7 +171,8 @@ def base_uniforms(sun_angle, forward, w, h, rain=0.0, thunder=0.0, moon_phase=0,
         f"f viewWidth {w}", f"f viewHeight {h}", f"f aspectRatio {w / h}", "f near 0.05", "f far 256.0",
         f"f sunAngle {sun_angle}", f"i moonPhase {moon_phase}", f"f rainStrength {rain}", f"f wetness {rain}",
         f"f thunderStrength {thunder}", f"f frameTimeCounter {t}", "i frameCounter 0", "i worldDay 3",
-        f"f cloudHeight 192.33", f"v3 cameraPosition 0 {cam_y} 0", f"f eyeAltitude {cam_y}",
+        f"f cloudHeight 192.33", f"v3 cameraPosition {cam_xz[0]} {cam_y} {cam_xz[1]}", f"f eyeAltitude {cam_y}",
+        f"v3 shadowLightPosition {(sun_view if sun[1] > -0.001 else moon_view)[0]} {(sun_view if sun[1] > -0.001 else moon_view)[1]} {(sun_view if sun[1] > -0.001 else moon_view)[2]}",
         "f nightVision 0", "i isEyeInWater 0", "v2 eyeBrightnessSmooth 0 240",
         f"v3 sunPosition {sun_view[0]} {sun_view[1]} {sun_view[2]}",
         f"v3 moonPosition {moon_view[0]} {moon_view[1]} {moon_view[2]}",
@@ -240,7 +242,117 @@ vec3 previewClouds(vec3 dir) {
 '''
 
 
-def contact_sheet(body_color, extra, name, w=480, h=270, presets=PRESETS, textures=(), pitch=8.0, cam_y=80.0, fov=70.0):
+
+WORLD_EXTRA = r"""
+#include "/lib/encoding.glsl"
+#include "/lib/lighting.glsl"
+PREVIEW_FOG_INCLUDE
+// ---- tiny voxel test world (preview only) ----
+int blockAt(ivec3 b) {
+    if (abs(b.x) > 40 || abs(b.z) > 40 || b.y < 50 || b.y > 90) return 0;
+    int h = 64 + int(floor(1.6 * sin(float(b.x) * 0.21) + 1.4 * cos(float(b.z) * 0.17)));
+    if (b.x >= 2 && b.x <= 15 && b.z >= -2 && b.z <= 14) h = 64;
+    // hut 6..11 x, 6..11 z, walls 3 high, roof, open doorway
+    if (b.x >= 6 && b.x <= 11 && b.z >= 6 && b.z <= 11 && b.y > 64 && b.y <= 68) {
+        bool wall = b.x == 6 || b.x == 11 || b.z == 6 || b.z == 11;
+        bool roof = b.y == 68;
+        bool door = b.z == 6 && b.x == 8 && b.y <= 66;
+        if (roof) return 6;
+        if (wall && !door) return 6;
+        if (b.x == 9 && b.z == 9 && b.y == 65) return 7; // glowstone
+        return 0;
+    }
+    // tree at (-6, -4)
+    if (b.x == -6 && b.z == -4 && b.y > h && b.y <= h + 5) return 4;
+    if (b.y >= h + 4 && b.y <= h + 7) {
+        vec3 d = vec3(b - ivec3(-6, h + 5, -4));
+        if (dot(d, d) < 7.5) return 5;
+    }
+    // stone wall
+    if (b.z == 14 && b.x >= -12 && b.x <= 2 && b.y > h && b.y <= h + 3) return 3;
+    if (b.y == h) return 1;
+    if (b.y < h && b.y >= h - 3) return 2;
+    if (b.y < h - 3) return 3;
+    return 0;
+}
+
+vec3 blockAlbedo(int id, vec3 n, vec2 uv, ivec3 b) {
+    ivec2 tx = ivec2(floor(uv * 16.0));
+    float r = hash12(vec2(tx) + vec2(b.xz) * 17.0 + float(b.y) * 3.0);
+    vec3 c = vec3(0.5);
+    if (id == 1) c = n.y > 0.5 ? vec3(0.36, 0.60, 0.22) : (uv.y > 0.8 ? vec3(0.36, 0.60, 0.22) : vec3(0.52, 0.37, 0.26));
+    if (id == 2) c = vec3(0.52, 0.37, 0.26);
+    if (id == 3) c = vec3(0.50);
+    if (id == 4) c = n.y > 0.5 ? vec3(0.62, 0.50, 0.30) : vec3(0.40, 0.30, 0.18);
+    if (id == 5) c = vec3(0.23, 0.46, 0.14);
+    if (id == 6) c = vec3(0.66, 0.52, 0.32);
+    if (id == 7) c = vec3(0.95, 0.80, 0.45);
+    return c * (0.82 + 0.3 * r);
+}
+
+bool traceVoxels(vec3 ro, vec3 rd, int steps, out ivec3 hitB, out vec3 hitN, out float hitT) {
+    ivec3 b = ivec3(floor(ro));
+    ivec3 st = ivec3(sign(rd));
+    vec3 inv = 1.0 / max(abs(rd), vec3(1e-6));
+    vec3 tMax = (vec3(b) + max(vec3(st), 0.0) - ro) / rd;
+    tMax = abs(tMax);
+    vec3 tDelta = inv;
+    hitN = vec3(0.0);
+    hitT = 0.0;
+    for (int i = 0; i < 160; i++) {
+        if (i >= steps) break;
+        if (blockAt(b) != 0) { hitB = b; return true; }
+        if (tMax.x < tMax.y && tMax.x < tMax.z) { b.x += st.x; hitT = tMax.x; tMax.x += tDelta.x; hitN = vec3(-float(st.x), 0.0, 0.0); }
+        else if (tMax.y < tMax.z) { b.y += st.y; hitT = tMax.y; tMax.y += tDelta.y; hitN = vec3(0.0, -float(st.y), 0.0); }
+        else { b.z += st.z; hitT = tMax.z; tMax.z += tDelta.z; hitN = vec3(0.0, 0.0, -float(st.z)); }
+    }
+    return false;
+}
+
+vec3 previewWorld(vec3 dir) {
+    vec3 ro = cameraPosition;
+    ivec3 hb; vec3 hn; float ht;
+    vec3 col;
+    if (!traceVoxels(ro, dir, 160, hb, hn, ht)) {
+        col = skyColorFull(dir);
+        float hd; vec4 c = fadeClouds(traceClouds(ro, dir, 1e6, hd), dir, hd);
+        return col * (1.0 - c.a) + c.rgb;
+    }
+    vec3 p = ro + dir * ht;
+    int id = blockAt(hb);
+    vec3 f = fract(p);
+    vec2 uv = abs(hn.x) > 0.5 ? vec2(f.z, f.y) : (abs(hn.y) > 0.5 ? f.xz : vec2(f.x, f.y));
+    Surface s;
+    s.albedo = srgbToLinear(blockAlbedo(id, hn, uv, hb));
+    s.normal = hn; s.geoNormal = hn;
+    s.ao = 1.0; s.smoothness = 0.0; s.emissive = id == 7 ? 1.0 : 0.0;
+    s.flags = id == 5 ? FLAG_SSS : 0;
+    vec3 sp = p + hn * 0.01;
+    // sky light: open above?
+    ivec3 tb; vec3 tn; float tt;
+    // Vanilla-ish sky light: full where the column above is open, ~11/15 under a roof.
+    float sky = traceVoxels(sp, vec3(0.0, 1.0, 0.0), 24, tb, tn, tt) ? 0.7 : 1.0;
+    if (hb.x >= 6 && hb.x <= 11 && hb.z >= 6 && hb.z <= 11 && p.y < 68.0 && p.y > 64.5) sky = 0.45;
+    // block light from the glowstone at (9.5, 65.5, 9.5)
+    vec3 lp = vec3(9.5, 65.5, 9.5);
+    float md = abs(p.x - lp.x) + abs(p.y - lp.y) + abs(p.z - lp.z);
+    float blk = saturate((15.0 - md) / 15.0);
+    s.light = vec2(blk, saturate(sky));
+    float sh = traceVoxels(sp, lightDir, 96, tb, tn, tt) ? 0.0 : 1.0;
+    vec3 shadow = vec3(sh) * lightLeakGuard(s.light.y) * cloudShadow(p);
+    col = shadeSurface(s, shadow, vec3(0.0), 0.0);
+    PREVIEW_FOG_APPLY
+    return col;
+}
+"""
+
+
+FOG_INCLUDE = ""
+FOG_APPLY = ""
+
+
+def contact_sheet(body_color, extra, name, w=480, h=270, presets=PRESETS, textures=(), pitch=8.0, cam_y=80.0, fov=70.0,
+                  cam_xz=(0.0, 0.0), look_at=None):
     build_bin()
     tmp = tempfile.mkdtemp(prefix="solstice-preview-")
     body = SKY_BODY.replace("PREVIEW_COLOR", body_color).replace("PREVIEW_EXTRA", extra)
@@ -254,8 +366,13 @@ def contact_sheet(body_color, extra, name, w=480, h=270, presets=PRESETS, textur
     for label, angle, rain, thunder in presets:
         row = []
         for toward in (True, False):
-            fwd = azimuth_forward(angle, toward, pitch)
-            u = base_uniforms(angle, fwd, w, h, rain, thunder, cam_y=cam_y, fov=fov) + tex_lines
+            if look_at is not None:
+                cam = np.array([cam_xz[0], cam_y, cam_xz[1]])
+                tgt = np.array(look_at)
+                fwd = tgt - cam if toward else np.array([-(tgt - cam)[2], (tgt - cam)[1], (tgt - cam)[0]])
+            else:
+                fwd = azimuth_forward(angle, toward, pitch)
+            u = base_uniforms(angle, fwd, w, h, rain, thunder, cam_y=cam_y, fov=fov, cam_xz=cam_xz) + tex_lines
             row.append(render(frag, w, h, u, tmp))
         rows.append(np.concatenate(row, 1))
         print(f"  rendered {label}")
@@ -279,6 +396,15 @@ if __name__ == "__main__":
     elif scene == "clouds_above":
         contact_sheet("previewClouds(dir)", CLOUD_EXTRA, "clouds_above", presets=cloud_presets,
                       textures=[("cloudTex", 0)], pitch=-12.0, cam_y=225.0)
+    elif scene == "world":
+        extra = WORLD_EXTRA.replace("PREVIEW_FOG_INCLUDE", FOG_INCLUDE).replace("PREVIEW_FOG_APPLY", FOG_APPLY)
+        contact_sheet("previewWorld(dir)", CLOUD_EXTRA + extra, "world", presets=PRESETS,
+                      textures=[("cloudTex", 0)], pitch=-14.0, cam_y=71.0, cam_xz=(2.0, -9.0), look_at=(9.0, 65.0, 8.0))
+    elif scene == "hut":
+        extra = WORLD_EXTRA.replace("PREVIEW_FOG_INCLUDE", FOG_INCLUDE).replace("PREVIEW_FOG_APPLY", FOG_APPLY)
+        pres = [p for p in PRESETS if p[0] in ("noon", "sunset", "night")]
+        contact_sheet("previewWorld(dir)", CLOUD_EXTRA + extra, "hut", presets=pres,
+                      textures=[("cloudTex", 0)], cam_y=66.6, cam_xz=(8.5, 3.0), look_at=(8.6, 65.6, 9.0))
     elif scene == "clouds_flat":
         contact_sheet("previewClouds(dir)", "#define PREVIEW_FLAT 1\n" + CLOUD_EXTRA, "clouds_flat",
                       presets=cloud_presets, textures=[("cloudTex", 0)], pitch=18.0, cam_y=90.0)

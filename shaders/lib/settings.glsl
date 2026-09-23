@@ -33,6 +33,8 @@
 #define SHADOWS //Sun and moon cast real shadows.
 const int shadowMapResolution = 2048; // [1024 1536 2048 3072 4096]
 const float shadowDistance = 128.0; // [96.0 128.0 160.0 192.0 256.0]
+const float shadowDistanceRenderMul = 1.0;
+const bool shadowHardwareFiltering = true;
 #define SHADOW_SAMPLES 8 // [4 8 12 16 24] Shadow filter taps. More = smoother soft edges, slower.
 #define SHADOW_SOFTNESS 100 // [50 75 100 150 200] Width of the soft shadow edge, percent.
 #define COLORED_SHADOWS //Stained glass and water tint the light that passes through them.

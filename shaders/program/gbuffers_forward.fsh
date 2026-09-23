@@ -15,6 +15,9 @@
 #include "/lib/material.glsl"
 #include "/lib/sky.glsl"
 #include "/lib/lighting.glsl"
+#include "/lib/spaces.glsl"
+#define SHADOW_TAPS 1
+#include "/lib/shadows.glsl"
 
 uniform sampler2D gtexture;
 uniform float alphaTestRef;
@@ -58,7 +61,12 @@ void main() {
         s.smoothness = 0.0;
         s.emissive = 0.0;
         s.flags = 0;
-        vec3 shadow = vec3(skyShadowProxy(light.y) * 0.8);
+        #ifdef SHADOWS
+            vec3 shadow = shadowVisibility(playerPos, lightDir, 0.5) * lightLeakGuard(light.y);
+            shadow = mix(shadow, vec3(skyShadowProxy(light.y)), shadowEdgeFade(playerToShadowClip(playerPos)));
+        #else
+            vec3 shadow = vec3(skyShadowProxy(light.y) * 0.8);
+        #endif
         lit = shadeSurface(s, shadow, vec3(0.0), 0.0);
     #elif defined FW_WEATHER
         vec2 light = lightmapLevels(lmcoord);

@@ -13,6 +13,7 @@
 #include "/lib/sky.glsl"
 #include "/lib/lighting.glsl"
 #include "/lib/clouds.glsl"
+#include "/lib/shadows.glsl"
 
 uniform sampler2D colortex0;
 uniform sampler2D colortex1;
@@ -38,6 +39,23 @@ float cloudEntryDistance(vec3 origin, vec3 dir) {
     if (abs(dir.y) < 1e-5) return 1e9;
     float t = ((origin.y < y0 ? y0 : y1) - origin.y) / dir.y;
     return t > 0.0 ? t : 1e9;
+}
+
+// Direct-light visibility: the shadow map where it exists, the sky-light
+// proxy beyond it (smoothly blended at the edge) and for the held item.
+vec3 shadowFor(Surface s, vec3 playerPos, bool isHand) {
+    #ifdef SHADOWS
+        if (isHand) return vec3(skyShadowProxy(float(eyeBrightnessSmooth.y) / 240.0));
+        float ndl = dot(s.normal, lightDir);
+        if (ndl <= 0.0 && (s.flags & FLAG_SSS) == 0) return vec3(0.0);
+        float fade = shadowEdgeFade(playerToShadowClip(playerPos));
+        vec3 vis = vec3(1.0);
+        if (fade < 1.0) vis = shadowVisibility(playerPos, s.geoNormal, ignAnimated(gl_FragCoord.xy, frameCounter));
+        vec3 shadow = mix(vis, vec3(skyShadowProxy(s.light.y)), fade);
+        return shadow * lightLeakGuard(s.light.y);
+    #else
+        return vec3(skyShadowProxy(s.light.y));
+    #endif
 }
 
 void main() {
@@ -73,7 +91,7 @@ void main() {
         if ((s.flags & FLAG_UNLIT) != 0) {
             color = s.albedo * (1.0 + s.emissive * 3.0);
         } else {
-            vec3 shadow = vec3(skyShadowProxy(s.light.y));
+            vec3 shadow = shadowFor(s, playerPos, isHand);
             shadow *= cloudShadow(playerPos + camWorld);
 
             vec3 tint = vec3(0.0);
