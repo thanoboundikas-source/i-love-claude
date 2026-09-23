@@ -45,15 +45,34 @@ OVERWORLD = [
     ("final", "fullscreen", "final", None),
 ]
 
+# Nether and End: small forward fallback pipeline (see program/dim_forward.*).
+def dim_programs(dim_define):
+    fam = [
+        ("gbuffers_basic", "DF_UNLIT"), ("gbuffers_textured", "DF_UNLIT"),
+        ("gbuffers_textured_lit", "DF_LIT"), ("gbuffers_terrain", "DF_LIT"),
+        ("gbuffers_block", "DF_LIT"), ("gbuffers_water", "DF_LIT"),
+        ("gbuffers_entities", "DF_ENTITY"), ("gbuffers_hand", "DF_ENTITY"),
+        ("gbuffers_weather", "DF_LIT"), ("gbuffers_particles", "DF_LIT"),
+        ("gbuffers_armor_glint", "DF_UNLIT"), ("gbuffers_spidereyes", "DF_UNLIT"),
+        ("gbuffers_beaconbeam", "DF_UNLIT"), ("gbuffers_skytextured", "DF_SKY"),
+        ("gbuffers_skybasic", "DF_SKYBASIC"),
+    ]
+    out = [(name, "dim_forward", "dim_forward", [dim_define, v]) for name, v in fam]
+    out.append(("final", "fullscreen", "dim_final", [dim_define]))
+    return out
+
+
 FOLDERS = {
     "": OVERWORLD,
+    "nether": dim_programs("DIM_NETHER"),
+    "end": dim_programs("DIM_END"),
 }
 
 
 def write_stub(path, body, define):
     lines = ["#version 330 compatibility", ""]
-    if define:
-        lines.append(f"#define {define} 1")
+    for d in ([define] if isinstance(define, str) else (define or [])):
+        lines.append(f"#define {d} 1")
     lines.append(f'#include "/program/{body}"')
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n")

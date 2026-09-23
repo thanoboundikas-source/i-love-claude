@@ -272,3 +272,26 @@ are preserved in git history, commit d1cb592.)
     plus a sky-gradient reflection weighted by smoothness² and sky light —
     enough for wet ground, iron and polished stone without SSR on every
     surface (which the spec does not ask for and the frame budget can't pay).
+
+## Profiles and dimensions
+
+63. **Profiles list every performance-relevant option** (identical key set in
+    all three) so Iris always recognises which profile is active. Defaults in
+    settings.glsl equal REGULAR. User taste options (brightness, saturation,
+    cloud thickness, fog amount, strengths, sun angle, FULLBRIGHT) are in no
+    profile, so switching profile never resets them — FULLBRIGHT works in all
+    three.
+64. **What each profile actually runs** (passes, not just flags):
+    POTATO = gbuffers + deferred1 + translucents + final (no shadow pass, no
+    cloud pass, no composites; flat clouds, forward water, tonemap only).
+    REGULAR = everything; clouds at 0.75x; reflections + godrays at 0.375x
+    (0.75 x half); 2048 shadow map / 128 blocks / 8 taps; 8 godray samples;
+    16 SSR steps. INSANE = everything; clouds, reflections, godrays at 1.0x;
+    4096 / 192 blocks / 16 taps; 12 godray samples; 32 SSR steps.
+65. **Nether and End use a small forward fallback** (`shaders/nether`,
+    `shaders/end`, selected by dimension.properties): vanilla's own lightmap
+    (which already carries each dimension's ambient light and block light),
+    simple face shading, vanilla-style fog toward `fogColor`, the Solstice
+    tonemap/saturation, FULLBRIGHT and night vision. No shadows, clouds or
+    post there yet — those are the later prompts. The End sky box is drawn
+    as-is; anything uncovered shows vanilla's fog colour.
