@@ -29,11 +29,12 @@ vec3 ambientLight;  // sky light on an upward face under open sky
 
 const vec3 DAY_ZENITH      = vec3(0.13, 0.30, 0.86);
 const vec3 DAY_HORIZON     = vec3(0.50, 0.68, 1.00);
-const vec3 SUNSET_ZENITH   = vec3(0.10, 0.14, 0.34);
+const vec3 SUNSET_ZENITH   = vec3(0.11, 0.19, 0.50);
 const vec3 SUNSET_TOWARD   = vec3(1.00, 0.44, 0.15);
 const vec3 SUNSET_AWAY     = vec3(0.40, 0.33, 0.52);
-const vec3 NIGHT_ZENITH    = vec3(0.0045, 0.0080, 0.0220);
-const vec3 NIGHT_HORIZON   = vec3(0.0110, 0.0180, 0.0380);
+const vec3 SUNSET_AFTERGLOW = vec3(0.62, 0.30, 0.42);
+const vec3 NIGHT_ZENITH    = vec3(0.0055, 0.0100, 0.0290);
+const vec3 NIGHT_HORIZON   = vec3(0.0130, 0.0210, 0.0440);
 
 const vec3 SUN_NOON        = vec3(1.00, 0.95, 0.88);
 const vec3 SUN_GOLDEN      = vec3(1.00, 0.60, 0.30);
@@ -122,7 +123,11 @@ vec3 skyGradient(vec3 dir) {
     // sun and soft purple away from it. Zenith stays blue -> no orange soup.
     float cosSun = dot(dir, sunDir);
     float toward = saturate(cosSun * 0.5 + 0.5);
-    vec3 band = mix(SUNSET_AWAY, SUNSET_TOWARD, toward * toward * toward);
+    // Once the sun is below the horizon the glow turns from orange to a
+    // soft rose and fades, instead of going brown.
+    float afterglow = 1.0 - smoothstep(-0.16, 0.0, sunElev);
+    vec3 towardCol = mix(SUNSET_TOWARD, SUNSET_AFTERGLOW, afterglow);
+    vec3 band = mix(SUNSET_AWAY, towardCol, toward * toward * toward);
     band = overcast(band, rainF * 0.9) * mix(1.0, 0.6, rainF);
     float bandMix = exp(-hp * 9.0) * sunsetF * (0.30 + 0.70 * toward);
     col = mix(col, band, bandMix);
