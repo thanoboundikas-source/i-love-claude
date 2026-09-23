@@ -41,6 +41,7 @@ OVERWORLD = [
     ("deferred1", "fullscreen", "deferred_lighting", None),
     ("composite", "fullscreen", "composite_fx", None),
     ("composite1", "fullscreen", "composite_water", None),
+    ("composite2", "fullscreen", "composite_taa", None),
     ("final", "fullscreen", "final", None),
 ]
 

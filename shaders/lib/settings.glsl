@@ -93,5 +93,7 @@ const float sunPathRotation = -30.0; // [-45.0 -30.0 -20.0 -10.0 0.0 10.0 20.0 3
 #if defined SHADOWS && defined COLORED_SHADOWS
     #define COLORED_SHADOWS_ACTIVE 1
 #endif
-// TAA_JITTER (sub-pixel camera jitter) is switched on together with the TAA
-// resolve pass in the post-processing step; jitter without a resolve shakes.
+// Sub-pixel camera jitter only when the TAA resolve pass (composite2) runs.
+#ifdef TAA
+    #define TAA_JITTER 1
+#endif

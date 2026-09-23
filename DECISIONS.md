@@ -230,3 +230,23 @@ are preserved in git history, commit d1cb592.)
     deserts or snow), sky-exposed surfaces — mostly tops — darken (albedo
     squared toward itself) and gain smoothness 0.85, which the generated
     specular turns into a gloss. Driven by `wetness`, so it dries slowly.
+
+## Post-processing
+
+56. **TAA in its own pass (composite2)**, full resolution, history in RGBA16F
+    colortex5. Camera-only reprojection (per-object motion vectors would need
+    another full-res buffer written by every entity program); moving mobs
+    rely on the neighbourhood clip, which keeps ghosting to a faint trail at
+    most. Variance clip (1.25 sigma) in YCoCg, in a compressed x/(1+luma)
+    space so bright pixels don't flicker. Current-frame weight 0.09 standing
+    still, up to 0.30 while moving (sharper in motion). Held item is not
+    reprojected. NaN/inf history is discarded.
+57. **Bloom has no pass of its own**: Iris generates colortex2's mip chain just
+    before final; final gathers levels 2-6 with a 4-tap tent each. A soft
+    knee (l/(l+0.9)) means midtones barely bloom and the image stays clean;
+    the sun, lava, glowstone and bright sky glow. Always "half res" or lower
+    by construction, so REGULAR's "bloom at half res" is met in every profile.
+58. **Sharpening**: 5-tap unsharp mask in final, clamped to the neighbours'
+    range (no halos), strength 0.6 x SHARPEN_AMOUNT.
+59. **No vignette, no chromatic aberration, no film grain, no lens flare** —
+    not in the spec and they work against "clean". Vanilla vignette is off.
