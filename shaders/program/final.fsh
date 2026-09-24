@@ -19,7 +19,7 @@
 #include "/lib/tonemap.glsl"
 
 // Brightness given back by FILMIC_CURVE at night / golden hour (see below).
-const float FILMIC_NIGHT_GAIN = 1.35;
+const float FILMIC_NIGHT_GAIN = 1.25;    // night / underground (the toe is gentle there)
 const float FILMIC_GOLDEN_GAIN = 1.12;    // sun above ~3 degrees (the key lift carries it)
 const float FILMIC_HORIZON_GAIN = 1.40;   // sun at the horizon, where the key has faded out
 

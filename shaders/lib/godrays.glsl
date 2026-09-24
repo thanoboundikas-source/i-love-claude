@@ -13,6 +13,15 @@ float godrayShaftWeight(float vis) {
     return vis * vis;
 }
 
+// Optical depth of a march to a surface `dist` blocks away (at most 48):
+// the scattered light a fully lit ray of that length would get.
+float godrayDepthTerm(float dist) {
+    return 1.0 - exp(-min(dist, 48.0) * 0.012);
+}
+vec4 godrayDepthTerm(vec4 dist) {
+    return 1.0 - exp(-min(dist, vec4(48.0)) * 0.012);
+}
+
 // The effects pass stores the ray's *shadow deficit*: how much scattered
 // light the shadow casters along the march take away, (1 - weight) times the
 // optical depth of the march. Open air stores 0. composite1 turns it into
@@ -31,15 +40,25 @@ float godrayAmount(vec3 playerEnd, float jitter) {
         vis += inside ? texture(shadowtex1, sp) : 1.0;
     }
     vis /= float(GODRAY_SAMPLES);
-    return (1.0 - godrayShaftWeight(vis)) * (1.0 - exp(-dist * 0.012));
+    return (1.0 - godrayShaftWeight(vis)) * godrayDepthTerm(dist);
 }
 
 // Shafts from the stored deficits: a pixel glows by how much more light its
 // ray gets than the most shadowed ray beside it. Open air (all deficits 0)
 // and uniform shadow both give 0; a lit gap next to shadowed air gives a
-// shaft; a shadowed pixel never glows more than the lit air beside it.
-// Using the deficit, not the lit amount, means depth edges in open air (a
-// near hill against the sky) add nothing.
+// shaft. Using the deficit, not the lit amount, means depth edges in open
+// air (a near hill against the sky) add nothing.
+//
+// Rays of different lengths are compared over the shorter march: a
+// longer neighbour's deficit is scaled to the centre's optical depth (its
+// shadowed fraction times the centre's depth). Without that, a short ray
+// to a near surface, even a fully shadowed one, glowed by the difference
+// in ray length (hourglass bands on shaded tree trunks, DECISIONS #83). A
+// shorter neighbour keeps its own (smaller) deficit, so the far side of a
+// near dark object gets no rim. And a pixel never gets more than the light
+// its own ray receives (optical depth minus its deficit): a fully shadowed
+// ray never glows, and a shadowed pixel never glows more than the lit air
+// beside it.
 //
 // Sun shafts are parallel in the world, so on screen they all run through
 // the vanishing point of the light direction. The 4 neighbours sit ACROSS
@@ -60,8 +79,14 @@ vec2 godrayAcross(vec2 uv) {
     return vec2(a.x / aspectRatio, a.y);
 }
 
-float godrayShafts(float centre, float t0, float t1, float t2, float t3) {
-    return max(max(max(t0, t1), max(t2, t3)) - centre, 0.0);
+// centre, taps: stored deficits; tapDist, dist: surface distances of the
+// taps and of the centre pixel (1e4 for the sky, as in composite1).
+float godrayShafts(float centre, vec4 taps, vec4 tapDist, float dist) {
+    float dc = godrayDepthTerm(dist);
+    vec4 dn = godrayDepthTerm(tapDist);
+    vec4 t = taps * min(vec4(1.0), dc / max(dn, vec4(1e-4)));
+    float m = max(max(t.x, t.y), max(t.z, t.w));
+    return clamp(m - centre, 0.0, max(dc - centre, 0.0));
 }
 
 // Henyey-Greenstein phase: strong forward scattering toward the light.

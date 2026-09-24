@@ -26,15 +26,16 @@ float shoulderCurve(float x, float start) {
 
 // Rational toe: log-log slope 1 at black (detail kept), steeper in the
 // shadows, 1 again in the highlights, pivot 0.18 unchanged. a is the slope
-// at black: 0.2 (~2 stops deeper) on the daytime surface, 0.55 (~0.8 stop)
+// at black: 0.2 (~2 stops deeper) on the daytime surface, 0.80 (~0.3 stop)
 // at night / underground (gate = 1), where a deep toe turned every
-// moon-shaded side and the edge of every torch pool pure black.
+// moon-shaded side and the edge of every torch pool pure black (0.55 still
+// crushed moon-shaded dirt sides to ~8/255, DECISIONS #84).
 float toeCurve(float x, float gate) {
     float t = 0.04 * float(FILMIC_CONTRAST) * 0.01;
     #ifdef FULLBRIGHT
         t *= 0.5;
     #endif
-    float a = mix(0.2, 0.55, gate);
+    float a = mix(0.2, 0.80, gate);
     return x * (x + a * t) / (x + t) * ((TM_PIVOT + t) / (TM_PIVOT + a * t));
 }
 

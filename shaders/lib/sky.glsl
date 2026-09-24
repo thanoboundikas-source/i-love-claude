@@ -96,7 +96,9 @@ void initSky() {
     // relatively brighter than the sun.
     vec3 ambDay    = vec3(0.56, 0.72, 1.00) * 0.40;
     vec3 ambSunset = vec3(0.88, 0.70, 0.62) * 0.40;
-    vec3 ambNight  = vec3(0.40, 0.52, 0.85) * 0.040;
+    // Night fill 0.060 (was 0.040): shaded sides and the ground under trees
+    // sat at 8-11/255 with real (vanilla) grass colours (DECISIONS #84).
+    vec3 ambNight  = vec3(0.40, 0.52, 0.85) * 0.060;
     ambientLight = mix(ambNight, ambDay, dayF);
     ambientLight = mix(ambientLight, ambSunset, sunsetF * 0.7 * (1.0 - dayF * 0.5));
     ambientLight = overcast(ambientLight, rainF * 0.7) * mix(1.0, 0.95, rainF) * mix(1.0, 0.7, stormF);

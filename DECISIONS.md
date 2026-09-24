@@ -440,11 +440,15 @@ are preserved in git history, commit d1cb592.)
       (lighting.glsl), sunset fill ambSunset x0.40 -> x0.46 (sky.glsl), rain
       weatherDirect 0.075 -> 0.10 (sky.glsl). Lower each one to go darker.
     - Blind spots of the 80x80-block preview, to confirm in game: fog past
-      ~57 blocks and the border fade (checked numerically), caves (x1.35 gain
-      since #70, the desaturation gate and, since #81, the moonlit low-light
-      tint), underwater (fog light ~26% darker with the new fill),
-      Nether/End (x1.15 since #70). Overrides the old "Not filmic" spec
-      line.
+      ~57 blocks and the border fade (checked numerically), caves (x1.25
+      gain and the 0.80 night toe since #84, the desaturation gate and,
+      since #81, the moonlit low-light tint), underwater (fog light ~26%
+      darker with the new fill), Nether/End (x1.10 since #84). Overrides
+      the old "Not filmic" spec line.
+    - *Note 2026-09-24 (third review), see #85:* every preview number in
+      #67-#82 was measured with a preview grass about twice as green and
+      bright as vanilla plains grass. #85 re-measures the acceptance list
+      on vanilla colours and restates the albedo-dependent criteria.
 68. **Fixed time-of-day exposure for the cinematic toe.** The toe darkens dim
     scenes most, so final.fsh multiplies by 1.5 at night or underground
     (FILMIC_NIGHT_GAIN; 1.25 with FULLBRIGHT, whose toe is halved) and by
@@ -462,6 +466,8 @@ are preserved in git history, commit d1cb592.)
     *Changed again 2026-09-24 (second review), see #80:* golden gain x1.12
     (FILMIC_GOLDEN_GAIN) with the sun above ~3 degrees, rising to x1.40
     (FILMIC_HORIZON_GAIN) as the key fades out at the horizon.
+    *Changed again 2026-09-24 (third review), see #84:* night/underground
+    gain x1.25 (FULLBRIGHT x1.125), dim_final x1.10.
 
 ### Review fixes (two critics on look v2, 2026-09-24)
 
@@ -490,6 +496,10 @@ measured tiles); numbers below are INSANE, bottom 55% of each tile, sRGB.
     old brightness without the veil. Morning (18.6 degrees) +3%, noon
     unchanged. tools/preview.py has "golden am" / "golden pm" presets (sun
     ~6 degrees) at the end of the world, hut and lake sheets.
+    *Correction 2026-09-24 (third review), see #85:* "back to its old
+    brightness" was an artefact of the too-green preview grass. With
+    vanilla grass colours the golden-hour ground is 7-26% darker than the
+    pre-v2 look (sunlit grass brighter and golden, shade much deeper).
     *Changed 2026-09-24 (second review), see #80:* the x1.40 gain lifted
     the shade along with the ground and kept golden hour flat (lit/shade 1.2
     on grass tops). The warmth now comes from a low-sun key lift, and the gain
@@ -508,6 +518,11 @@ measured tiles); numbers below are INSANE, bottom 55% of each tile, sRGB.
     midtones 21-27% brighter than the old curve; 1.15 keeps its usual
     0.03-0.1 range within -5%..+11% (reasoned only, the preview cannot
     render the Nether).
+    *Changed 2026-09-24 (third review), see #84:* with vanilla grass
+    colours a = 0.55 still left 9.5-12.9% of the night ground under
+    12/255. Now a = 0.80 at gate 1, FILMIC_NIGHT_GAIN 1.25, ambNight x0.060,
+    dim_final x1.10. (Below the 0.03-0.1 range, a = 0.55 with x1.15 was
+    darker than stated: -20% at 0.01.)
 71. **Bloom veiled snowy and desert biomes.** A threshold of 1.0 with a 0.5
     knee starts blooming at 0.5; a sunlit snow top at noon is ~1.3. Now
     BLOOM_THRESHOLD 1.8, BLOOM_KNEE 0.3: nothing below 1.5 blooms, which is
@@ -606,7 +621,8 @@ against 0.40) was already there before this round.
     the pixel and at 4 neighbours and adds godrayLight(max(max(neighbours)
     - centre, 0)): open air and uniform shadow give 0, lit air beside
     shadowed air gives a shaft, and a shadowed pixel never glows more than
-    the lit air next to it. Cost: 4 more bilinear taps of the low-res
+    the lit air next to it (*correction, third review: only true for rays
+    of equal length, see below and #83*). Cost: 4 more bilinear taps of the low-res
     buffer and one mat4 x vec4; no pass, buffer or loop. Three changes to
     the reviewer's version, each tested:
     - Deficit, not the lit amount. The suggested max(a0 - min(taps), 0) on
@@ -640,6 +656,15 @@ against 0.40) was already there before this round.
     resolved (neither was #73): 12 samples over 48 blocks cannot resolve a
     1-block window beam; in-room beams stay invisible. The preview traces
     each neighbour as its own ray; the game bilinear-samples the buffer.
+    *Correction 2026-09-24 (third review), see #83:* the deficit makes
+    depth edges harmless only in open air, where every deficit is 0. The
+    deficit grows with the ray's length, so in shadowed air a short ray to
+    a near surface (a backlit trunk, a canopy edge, a wall in shade) got
+    the difference in ray length as glow, even when fully shadowed:
+    hourglass bands on shaded trunks, and a fully shadowed trunk could
+    glow 3.4x more than a real beam beside it. None of the world, hut and
+    lake cameras exercised that case. #83 compares rays over the shorter
+    march and caps the glow at the ray's own light.
 78. **Split toning never touches the sky.** final.fsh reads depthtex0
     (declared only with SPLIT_TONING) and passes surface = 0 for depth 1:
     sky, sun, moon and our clouds, which deferred1 composites onto depth-1
@@ -653,7 +678,8 @@ against 0.40) was already there before this round.
     1.35 and the sunset fill from 0.40 to 0.36, the opposite of the aim),
     and its blind-spot gains were 1.5 / 1.25. Now relative to the current
     code (golden gain 1.12, GOLDEN_LIFT 0.73, ambSunset x0.40, rain
-    weatherDirect 0.075) and x1.35 caves / x1.15 Nether-End.
+    weatherDirect 0.075) and x1.35 caves / x1.15 Nether-End (now x1.25 /
+    x1.10, #84; #67 updated).
 80. **Golden hour: warm, directional ground.** With the sun at 4-13
     degrees a flat top gets N.L = sin(elevation) ~ 0.1, so it was lit
     mostly by the cool fill, and #69's x1.40 gain lifted fill and shade
@@ -704,6 +730,10 @@ against 0.40) was already there before this round.
     much more shade. A warmer fill would fail the snow-shade target and
     the orange-wash check (G/R 1.419 against 1.40). The one tile with 45%
     sunlit grass meets B/G.
+    *Note 2026-09-24 (third review), see #85:* the R/G miss was the
+    preview's too-green grass. With vanilla colours golden ground R/G is
+    0.86-0.89 and sunlit grass (75,82,32) is golden-olive; B/G is still met
+    on one tile of four, for the reason above.
 81. **Night: moonlit blue instead of olive.** At night and underground
     the low-light shift in the tonemap now moves non-warm dim pixels 60%
     (was 45%) toward lum x MOONLIT_TINT (0.76, 0.95, 1.48). Warm pixels
@@ -724,6 +754,10 @@ against 0.40) was already there before this round.
     stone is warm and unchanged. Nether/End (dim_final passes gate 1):
     their red/yellow pixels are warm and unchanged; dark neutral pixels
     turn slightly bluer. Confirm both in game.
+    *Note 2026-09-24 (third review), see #84/#85:* these night numbers are
+    on the too-green preview grass. With vanilla colours the night was
+    crushed (9.5-12.9% of the ground under 12/255); #84 fixes it. The
+    moonlit tint itself holds: ground B/R 1.13-1.16.
 82. **Preview tooling.** preview.c binds a depthtex0 stand-in for final.fsh
     (the scene shader's location 1: 1 = sky, 0.5 = geometry), so the #78
     mask is tested; the single-pass sky/cloud sheets pass surface 0. The
@@ -731,3 +765,167 @@ against 0.40) was already there before this round.
     its own ray (with the lake's water plane in the lake scene,
     PREVIEW_LAKE). The golden am/pm presets (sun ~6 degrees) were already
     there.
+
+### Third review fixes (real grass colours, godray cap, night crush, 2026-09-24)
+
+A visual and a technical re-check of the second round found four problems:
+the preview's grass was about twice as green as the game's, which hid a
+crushed night and made the golden-hour brightness claims wrong; and the
+godray shaft step still made shadowed surfaces glow. All fixed below.
+Preview numbers: INSANE (`--game`), sRGB levels, "ground" = bottom 45% of
+a tile, preview with the new vanilla grass colours (#85) unless noted.
+"pre-v2" = commit 7dbdd21 rendered with the same preview (AO, golden
+presets, vanilla grass). check.sh: 80 configs, 2497 compiles, 0 errors / 0
+warnings; Apple GL 2497 and Iris patcher stage 193, 0 failed.
+
+83. **Godrays: rays compared over the shorter march, glow capped at the
+    ray's own light.** The stored deficit (1 - vis^2) x depth(d) grows
+    with the ray's length d, so #77's max(neighbours) - centre gave a
+    short ray to a near surface the *difference in ray length* as glow,
+    whether or not its own air was lit (see #77's correction). Worked
+    case: a fully shaded trunk 3 blocks away (deficit 0.035) beside a
+    ray over 20 blocks of shaded floor (0.213) got 0.178; a real 50%-lit
+    beam beside it only 0.053. On screen: curved hourglass bands on the
+    shaded side of trunks near a low sun (the across-shaft taps turn
+    around the sun). Now godrayShafts() takes the 4 neighbours' surface
+    distances (composite1 reads depthtex0 at each tap) and scales a
+    *longer* neighbour's deficit to the centre's optical depth (its
+    shadowed fraction x the centre's depth); a shorter neighbour keeps
+    its own deficit; and the result is clamped to the centre ray's own
+    light (depth - deficit). Open air still gives 0; a fully shadowed ray
+    can never glow; a real beam between shadowed rays of similar length
+    is unchanged. Cost: 4 texelFetch of depthtex0 and 4 screenToView in
+    composite1; no pass, buffer or loop. The preview mirror passes each
+    tap's own hit distance.
+    The two reviewers' fixes were each tested and each fixed one half:
+    - Technical (keep the deficit, cap at the ray's own light): fully
+      shadowed rays 0, but in the new canopy scene (#86) at golden hour
+      the forest interior's rays are all part-lit (the low sun streams in
+      under the roof), so the cap never bites and the trunk bands stayed
+      (on-off mean 0.51 -> 0.45 levels).
+    - Visual (store the distance-free shadowed fraction, multiply by the
+      centre's depth): trunk bands gone, but a long part-lit ray next to
+      any near shadowed silhouette gets its whole lit amount: in the
+      reviewer's sparse forest, sky pixels got mean 39-108e-3 shafts,
+      p95 290-370e-3 (#77 and this fix: 2-15e-3, p95 2-69e-3), a halo
+      round every tree against the sky.
+    The chosen version is exactly the smaller of the two, per neighbour.
+    Numbers (analysis at 640x360, fixed jitter, INSANE 12 samples):
+    - Technical reviewer's forest, looking toward the sun, rays fully in
+      shadow (vis <= 1/12), mean / p95 x1e-3: golden pm 12.6 / 75 -> 0.0 /
+      0.0, morning 18.2 / 101 -> 0.03 / 0.1, noon 6.8 / 43 -> 0 / 0. Mostly
+      lit rays (vis >= 0.67): golden pm 16.6 / 63 -> 16.2 / 63, morning
+      9.1 / 69 -> 9.1 / 69 (kept). Shaded surfaces with part-lit rays:
+      golden pm 13.0 -> 4.4, morning 9.3 -> 3.6.
+    - Canopy scene through the real final chain, toward the sun, godrays
+      on - off (mean / p99 / max levels): noon 0.23 / 2.8 / 4.0 -> 0.01 /
+      0.2 / 1.0; morning 0.79 / 10.4 / 30.7 -> 0.03 / 0.9 / 4.0 (the band
+      case); golden am 0.42 / 5.9 / 15.3 -> 0.27 / 4.1 / 15.3; golden pm
+      0.51 / 6.1 / 23.3 -> 0.32 / 4.1 / 23.3. The remaining peak is a soft
+      beam under the roof's sunward edge, lit air beside the roof's
+      shadow: a real shaft.
+    - world / lake sheets: at most 2 levels from before on any pixel;
+      hut: up to 8 levels at one hill crest near the sun, where the glow
+      is kept (mean +0.09-0.10 -> +0.05-0.07).
+    Unchanged limits: vis^2 over 12 samples makes a ray crossing one thin
+    shaft almost dark, and the 4-tap step only draws the edges of beams
+    wider than ~4% of the screen, so godrays stay subtle (the menu says
+    so). The canopy scene is the place to judge any later strength or
+    weight change.
+84. **Night: no crushed shade with real grass colours.** With vanilla
+    colours faces turned from the moon, the ground under trees and leaf
+    undersides sat at 8-11/255: shade lit only by ambNight 0.040, then
+    cut again by the 0.55 night toe after the x1.35 gain (a dirt side
+    ~0.0026 linear). The reviewer's tested set is adopted: ambNight
+    x0.040 -> x0.060 (sky.glsl), night toe a 0.55 -> 0.80 (tonemap.glsl,
+    gate 1), FILMIC_NIGHT_GAIN 1.35 -> 1.25 (final.fsh; FULLBRIGHT 1.175
+    -> 1.125). Plus dim_final x1.15 -> x1.10: the softer toe also reaches
+    the Nether/End (gate 1), and x1.10 keeps their 0.01-0.1 range within
+    -4%..+8% of the old identity curve (-6% at 0.005); x1.15 would give
+    +0%..+13%. Reasoned only: the preview cannot render the Nether/End, so
+    confirm them in game.
+    World night row, L / R, HEAD -> now (pre-v2): under 12/255 9.5 / 12.9%
+    -> 1.9 / 2.9% (0.0 / 1.2%); under 16/255 18.5 / 25.5% -> 11.6 / 16.1%
+    (8.3 / 12.0%); p5 10.4 / 10.2 -> 13.4 / 12.6 (15.2 / 14.3); mean 29.5
+    / 25.8 -> 32.7 / 29.1 (29.4 / 26.7); ground B/R 1.13 / 1.15 -> 1.14 /
+    1.16. Dusk p5 18 -> 20. Noon, morning, rain, thunder: at most 1 level
+    on any pixel; sunrise, sunset, golden hour at most 3. Night sky
+    through the HDR chain: mean 35.3 -> 36.0, dusk 79.2 -> 76.7. Torch
+    light: hut wall by block light 0.65-0.8 / 0.8+ (124,71,24) /
+    (173,105,40) -> (119,69,24) / (165,101,38); cave stone (sky light 0,
+    through the whole chain) light level 2 / 6 / 10 / 15: (16,14,14) /
+    (36,30,26) / (94,68,43) / (193,159,118) -> (17,15,15) / (38,31,27) /
+    (91,66,42) / (184,151,112) (pre-v2 15 / 35 / 79 / 157 in red):
+    levels 2-6 a touch brighter, the hot core 5% dimmer. FULLBRIGHT caves
+    within 5 levels.
+    Trade-off: the night mean is now 9-11% above pre-v2 (the #67 "+-5%"
+    check fails), because the moonlit tops are brighter than pre-v2 and
+    the shade had to come up. Sweeping ambNight 0.055-0.080, toe 0.80-1.0,
+    gain 1.0-1.25 (12 settings): p5 never gets past ~13.4 (moon-shaded
+    dirt sides and trunk sides in corner AO), and a mean within +7%
+    needs the gain at 1.15 or below: at 1.15 the tail is worse (under
+    12/255 2.5 / 3.8%), at 1.0-1.05 the torch core is 8-10% dimmer than
+    with this set. Keeping torch light was judged more important than 5%
+    of night brightness.
+85. **The preview's grass was twice as green as the game's.**
+    tools/preview.py grass id 1 (top and side top) vec3(0.36, 0.60, 0.22)
+    -> vec3(0.34, 0.44, 0.21), leaves id 5 vec3(0.23, 0.46, 0.14) ->
+    vec3(0.27, 0.39, 0.11): the 26.1.2 jar's grass_block_top / oak_leaves
+    mean times the plains grass #91BD59 / foliage #77AB2F tint (what
+    gbuffers_solid writes, tex x glcolor), divided by the 0.97 mean of the
+    preview's jitter. Checked: dirt, stone, planks and log tops were
+    already within ~5% (log sides are ~10% dark; left, a small area).
+    Green in linear light was 1.95x too high, so #67-#82 were measured on
+    a greener, brighter world than Chris sees. Same code (HEAD f500207),
+    old -> vanilla grass: noon ground mean 126.9 / 109.3 -> 96.5 / 83.5,
+    saturation 0.63 / 0.59 -> 0.51 / 0.48.
+    What changes in the story:
+    - Golden hour: sunlit grass is golden-olive, (75,82,32), R/G 0.86-0.89
+      (#80's unmet R/G >= 0.70 was the preview), percentile lit/shade 5.0-
+      6.4 (pre-v2 1.7-2.0), snow lit R/B 1.39-1.40 with shade B/R 1.09-
+      1.10, no orange wash (G/R toward the sun 1.11 sunset / 1.15 golden,
+      pre-v2 0.98 / 1.07). Ground B/G is at or below noon's on 1 of 4
+      tiles (shade share, as in #80). But the ground is 7-26% *darker*
+      than pre-v2 (means golden am L/R, pm L/R 55.8 / 47.3 / 48.8 / 44.0,
+      pre-v2 60.1 / 59.0 / 58.3 / 59.4), not "about as bright": sunlit
+      grass is brighter than pre-v2 (G 82 vs 69-72), the shade is far
+      deeper (p5 21-24 vs 41-46; pre-v2 shade was veiled). Knobs tested:
+      FILMIC_GOLDEN_GAIN 1.12 -> 1.25 gives +5%, ambSunset x0.40 -> x0.46
+      gives +3% (+6% at sunset); neither closes the gap, both flatten the
+      light. Kept: the darker shade is the cinematic contrast the owner
+      asked for. The spec line in CLAUDE.md now says so.
+    - Rain: saturation 0.31 / 0.27 (pre-v2 0.24 / 0.19, so +0.07); the
+      #67 ">= 0.40" was on the green grass. Rain mean 47 / 46 vs pre-v2
+      69 / 70: darker, the old fog wash is gone; first knob if Chris
+      finds rain too dark: weatherDirect 0.075 -> 0.10 (sky.glsl).
+    - Night: the crush (#84).
+    Restated acceptance list (world sheet, bottom 55% unless noted), with
+    the albedo-dependent criteria made relative to pre-v2 on the same
+    preview: noon / morning saturation >= pre-v2 + 0.06 (0.49 / 0.47 and
+    0.44 / 0.47 vs 0.41 / 0.37 and 0.35 / 0.36); rain saturation >= pre-
+    v2 + 0.05 (0.31 / 0.27 vs 0.24 / 0.19); rain sky saturation <= 0.25
+    (0.18); noon p5 0.08-0.13 (0.107 / 0.097); night p5 >= 0.025 (0.053 /
+    0.050); night ground under 12/255 <= 3% (new; 1.9 / 2.9%); noon
+    p90/p10 >= 3.5 (3.8 / 4.3); sunset and sunrise p90/p10 >= 2.0 (2.05-
+    2.41); noon shade-cool / lit-cool >= pre-v2 + 0.10 (1.52 / 1.43 vs
+    1.32 / 1.28; was >= 1.5); noon lit-quarter B/R <= pre-v2 - 0.10 (0.57
+    / 0.59 vs 0.70 / 0.73; was <= 0.55); noon mean >= -12% vs pre-v2;
+    night mean +-5%; sunset and sunrise mean >= 0.15 (0.17-0.20); noon
+    sky saturation >= 0.38 (0.40 / 0.42) and luma 0.60-0.68 (0.64 /
+    0.63); no orange wash: sunset R G/R >= pre-v2 + 0.05 (1.109 vs 0.983;
+    was >= 1.40) and golden pm R G/R >= pre-v2 (1.146 vs 1.067). Result:
+    35 / 38. Misses: night mean +9.9% / +8.7% (#84 trade-off) and noon R
+    mean -16.2% (L -11.3%): the veil and the raised black floor are gone
+    (noon p5 0.21 -> 0.10) while sunlit grass is within 4% of pre-v2 (G
+    126 vs 131); with the greener grass the lit tops weighed more and it
+    read -7% / -12%. HEAD f500207 on the same list: also 35 / 38 (its
+    misses: night under 12/255 9.5 / 12.9%, noon R mean).
+86. **Preview tooling.** Vanilla grass and leaf colours (#85; the
+    previews/baseline_*.png sheets are untouched and keep the old green).
+    New scene `canopy` (DECISIONS #83's test): a 2-block leaf roof 7-8
+    blocks up with 18% random 2x2 holes on trunks every 7 x 9 blocks,
+    camera deep inside at (5.5, 65.6, -17.5) looking toward and away from
+    the sun at noon, morning and golden am/pm. Shafts may only come from
+    lit holes and the sunward roof edge; shaded trunks and floor must
+    never glow. The godray mirror passes each neighbour's own hit
+    distance to godrayShafts, as composite1 reads depthtex0 at each tap.

@@ -6,9 +6,10 @@ Lets looks (sky palette, sunsets, clouds, fog, tonemap) be judged without
 launching Minecraft. It is NOT the game: no real terrain, no Iris, no TAA.
 
 Usage: python3 tools/preview.py SCENE [options]
-  SCENE: sky | clouds | clouds_above | clouds_flat | world | hut | lake | snow | pbr
+  SCENE: sky | clouds | clouds_above | clouds_flat | world | hut | lake | snow | canopy | pbr
   (snow = the world scene with snow-white ground and stone, a bloom test:
-  sunlit snow must not bloom or lift the shade around it)
+  sunlit snow must not bloom or lift the shade around it; canopy = a holed
+  leaf roof on trunks, the godray test: shafts only from the lit holes)
 Output: previews/<SCENE>.png inside the repo (ignored by git), or --name.
 
 world / hut / lake use the game's HDR chain (two passes):
@@ -20,7 +21,8 @@ world / hut / lake use the game's HDR chain (two passes):
   Godrays: the same march as composite's godrayAmount() (GODRAY_SAMPLES
   points to min(distance, 48), ign jitter) with the voxel tracer standing in
   for shadowtex1, composite1's shaft step (godrayShafts over 4 neighbours
-  across the shafts; here each neighbour is its own ray), then godrayLight()
+  across the shafts; here each neighbour is its own ray with its own hit
+  distance, which composite1 reads from depthtex0), then godrayLight()
   from lib/godrays.glsl, exactly where composite1 adds it. Each tile is rendered at the game's framebuffer size
   (--ss 4: 1920x1080, Chris' F2 screenshots) and box-averaged down to
   480x270, because bloom radius is in pixels: a 480x270 render would show
@@ -485,6 +487,16 @@ int blockAt(ivec3 b) {
         if (b.x == 9 && b.z == 9 && b.y == 65) return 7; // glowstone
         return 0;
     }
+#ifdef PREVIEW_CANOPY
+    // Godray test forest: a 2-block leaf roof 7-8 blocks up with random 2x2
+    // holes (18%), held up by trunks on a 7 x 9 grid (none around the hut).
+    if (b.y >= 73 && b.y <= 74 && b.x >= -30 && b.x <= 40 && b.z >= -30 && b.z <= 40) {
+        float hh = hash12(vec2(floor(vec2(b.xz) / 2.0)) * 1.37 + 3.1);
+        if (hh < 0.82) return 5;
+    }
+    if (((b.x + 40) % 7 == 0) && ((b.z + 40) % 9 == 0) && b.y > h && b.y < 73
+        && !(b.x >= 5 && b.x <= 12 && b.z >= 2 && b.z <= 12)) return 4;
+#endif
     // tree at (-6, -4)
     if (b.x == -6 && b.z == -4 && b.y > h && b.y <= h + 5) return 4;
     if (b.y >= h + 4 && b.y <= h + 7) {
@@ -503,11 +515,14 @@ vec3 blockAlbedo(int id, vec3 n, vec2 uv, ivec3 b) {
     ivec2 tx = ivec2(floor(uv * 16.0));
     float r = hash12(vec2(tx) + vec2(b.xz) * 17.0 + float(b.y) * 3.0);
     vec3 c = vec3(0.5);
-    if (id == 1) c = n.y > 0.5 ? vec3(0.36, 0.60, 0.22) : (uv.y > 0.8 ? vec3(0.36, 0.60, 0.22) : vec3(0.52, 0.37, 0.26));
+    // Grass and leaves: vanilla plains colours (the 26.1.2 textures' mean x
+    // the plains grass #91BD59 / foliage #77AB2F tint, as gbuffers_solid
+    // writes tex * glcolor), divided by the 0.97 mean of the jitter below.
+    if (id == 1) c = n.y > 0.5 ? vec3(0.34, 0.44, 0.21) : (uv.y > 0.8 ? vec3(0.34, 0.44, 0.21) : vec3(0.52, 0.37, 0.26));
     if (id == 2) c = vec3(0.52, 0.37, 0.26);
     if (id == 3) c = vec3(0.50);
     if (id == 4) c = n.y > 0.5 ? vec3(0.62, 0.50, 0.30) : vec3(0.40, 0.30, 0.18);
-    if (id == 5) c = vec3(0.23, 0.46, 0.14);
+    if (id == 5) c = vec3(0.27, 0.39, 0.11);
     if (id == 6) c = vec3(0.66, 0.52, 0.32);
     if (id == 7) c = vec3(0.95, 0.80, 0.45);
 #ifdef PREVIEW_SNOW
@@ -589,7 +604,7 @@ float previewGodrayAmount(vec3 dir, float hitDist, float jitter) {
         vis += traceVoxels(p, lightDir, 96, b, n, t) ? 0.0 : 1.0;
     }
     vis /= float(GODRAY_SAMPLES);
-    return (1.0 - godrayShaftWeight(vis)) * (1.0 - exp(-dist * 0.012));
+    return (1.0 - godrayShaftWeight(vis)) * godrayDepthTerm(dist);
 }
 
 // depthtex0 distance along any view ray (the water surface in the lake scene).
@@ -605,9 +620,12 @@ float previewPrimaryDist(vec3 dir) {
     return d;
 }
 
-float previewGodrayTap(vec2 uv, vec2 frag) {
+// A neighbour tap: its deficit (x) and its surface distance (y; composite1
+// reads it from depthtex0 at the tap).
+vec2 previewGodrayTap(vec2 uv, vec2 frag) {
     vec3 d = normalize(viewDirToWorld(screenToView(clamp(uv, 0.0, 1.0), 1.0)));
-    return previewGodrayAmount(d, previewPrimaryDist(d), ignAnimated(frag, frameCounter));
+    float hd = previewPrimaryDist(d);
+    return vec2(previewGodrayAmount(d, hd, ignAnimated(frag, frameCounter)), hd);
 }
 
 // composite1's neighbourhood step (program/composite_water.fsh): the same
@@ -616,11 +634,11 @@ float previewGodrayShafts(vec3 dir, float hitDist) {
     vec2 a = godrayAcross(texcoord);
     vec2 px = vec2(viewWidth, viewHeight);
     float c = previewGodrayAmount(dir, hitDist, ignAnimated(gl_FragCoord.xy, frameCounter));
-    return godrayShafts(c,
-        previewGodrayTap(texcoord + a * GODRAY_NEAR, gl_FragCoord.xy + a * GODRAY_NEAR * px),
-        previewGodrayTap(texcoord - a * GODRAY_NEAR, gl_FragCoord.xy - a * GODRAY_NEAR * px),
-        previewGodrayTap(texcoord + a * GODRAY_FAR, gl_FragCoord.xy + a * GODRAY_FAR * px),
-        previewGodrayTap(texcoord - a * GODRAY_FAR, gl_FragCoord.xy - a * GODRAY_FAR * px));
+    vec2 t0 = previewGodrayTap(texcoord + a * GODRAY_NEAR, gl_FragCoord.xy + a * GODRAY_NEAR * px);
+    vec2 t1 = previewGodrayTap(texcoord - a * GODRAY_NEAR, gl_FragCoord.xy - a * GODRAY_NEAR * px);
+    vec2 t2 = previewGodrayTap(texcoord + a * GODRAY_FAR, gl_FragCoord.xy + a * GODRAY_FAR * px);
+    vec2 t3 = previewGodrayTap(texcoord - a * GODRAY_FAR, gl_FragCoord.xy - a * GODRAY_FAR * px);
+    return godrayShafts(c, vec4(t0.x, t1.x, t2.x, t3.x), vec4(t0.y, t1.y, t2.y, t3.y), hitDist);
 }
 #endif
 
@@ -861,6 +879,15 @@ if __name__ == "__main__":
         pres = [p for p in PRESETS if p[0] in ("noon", "sunset", "night", "golden pm")]
         contact_sheet("previewWorld(dir)", CLOUD_EXTRA + extra, "hut", presets=pres,
                       textures=[("cloudTex", 0)], cam_y=66.6, cam_xz=(8.5, 3.0), look_at=(8.6, 65.6, 9.0),
+                      hdr=True, godrays=True)
+    elif scene == "canopy":
+        # Godray test: camera under a holed leaf roof, looking toward and away
+        # from the sun. Shafts may only come from the lit holes; shaded trunks
+        # and the shaded floor must never glow (DECISIONS #83).
+        extra = WORLD_EXTRA.replace("PREVIEW_FOG_INCLUDE", FOG_INCLUDE).replace("PREVIEW_FOG_APPLY", FOG_APPLY)
+        pres = [p for p in PRESETS if p[0] in ("noon", "morning", "golden am", "golden pm")]
+        contact_sheet("previewWorld(dir)", CLOUD_EXTRA + "#define PREVIEW_CANOPY 1\n" + extra, "canopy", presets=pres,
+                      textures=[("cloudTex", 0)], pitch=6.0, cam_y=65.62, cam_xz=(5.5, -17.5),
                       hdr=True, godrays=True)
     elif scene == "lake":
         extra = WORLD_EXTRA.replace("PREVIEW_FOG_INCLUDE", FOG_INCLUDE).replace("PREVIEW_FOG_APPLY", FOG_APPLY)

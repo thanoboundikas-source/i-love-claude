@@ -42,6 +42,16 @@ in vec2 texcoord;
 /* RENDERTARGETS: 2 */
 layout(location = 0) out vec4 outScene;
 
+#ifdef GODRAYS_ACTIVE
+// View distance to the surface at a godray neighbour tap (1e4 = sky, like
+// dist in main).
+float godrayTapDist(vec2 uv) {
+    ivec2 size = ivec2(viewWidth, viewHeight);
+    float d = texelFetch(depthtex0, clamp(ivec2(uv * vec2(size)), ivec2(0), size - 1), 0).r;
+    return d >= 1.0 ? 1e4 : length(screenToView(uv, d));
+}
+#endif
+
 void main() {
     ivec2 px = ivec2(gl_FragCoord.xy);
     initSky();
@@ -125,13 +135,15 @@ void main() {
         if (isEyeInWater == 0) {
             // Shafts only where lit air sits next to shadowed air: the
             // centre's shadow deficit against the largest of 4 neighbours
-            // across the shafts (low-res taps, no extra pass).
+            // across the shafts (low-res taps, no extra pass), each compared
+            // over the shorter of the two marches (full-res depth taps).
             vec2 a = godrayAcross(texcoord);
-            float shafts = godrayShafts(texture(colortex4, texcoord).a,
-                texture(colortex4, texcoord + a * GODRAY_NEAR).a,
-                texture(colortex4, texcoord - a * GODRAY_NEAR).a,
-                texture(colortex4, texcoord + a * GODRAY_FAR).a,
-                texture(colortex4, texcoord - a * GODRAY_FAR).a);
+            vec2 u0 = texcoord + a * GODRAY_NEAR, u1 = texcoord - a * GODRAY_NEAR;
+            vec2 u2 = texcoord + a * GODRAY_FAR,  u3 = texcoord - a * GODRAY_FAR;
+            vec4 taps = vec4(texture(colortex4, u0).a, texture(colortex4, u1).a,
+                             texture(colortex4, u2).a, texture(colortex4, u3).a);
+            vec4 tapDist = vec4(godrayTapDist(u0), godrayTapDist(u1), godrayTapDist(u2), godrayTapDist(u3));
+            float shafts = godrayShafts(texture(colortex4, texcoord).a, taps, tapDist, dist);
             vec3 dirW = normalize(viewDirToWorld(viewPos0));
             color += godrayLight(shafts, dirW);
         }
