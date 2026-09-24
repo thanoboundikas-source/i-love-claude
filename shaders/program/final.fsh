@@ -156,12 +156,14 @@ void main() {
     // has depth < 1, are toned). TAA jitters depthtex0 every frame but
     // colortex2 is already resolved, so a 1-pixel mask would flip on and
     // off along every silhouette at up to 7.5 Hz. The mask is the average
-    // of a 3x3 box of depth tests: a jitter that moves an edge by a pixel
-    // flips one row (or a diagonal) of it, at most 3 of the 9 taps, so the
-    // tint on the pixels next to a silhouette changes by at most 1/3 (~1
-    // level at the default strength; a 5-tap plus still flips 3 of its 5
-    // taps on the edge row, DECISIONS #91). Pure sky and pure geometry are
-    // unchanged.
+    // of a 3x3 box of depth tests, which keeps that flicker small: a
+    // jitter that moves a straight edge by a pixel flips one row (or a
+    // diagonal) of the box, 3 of the 9 taps, so the tint there changes by
+    // at most 1/3 (~1 level at the default strength). A convex corner (a
+    // roof corner against the sky) moves diagonally by up to ~0.8 px and
+    // can flip an L of 5 taps: about 5/9 (~1-2 levels; 3-4 at 200%). A
+    // 5-tap plus flips 3 of its 5 taps on a straight edge (DECISIONS #91,
+    // #100). Pure sky and pure geometry are unchanged.
     float surface = 1.0;
     #ifdef SPLIT_TONING
         float geo = 0.0;

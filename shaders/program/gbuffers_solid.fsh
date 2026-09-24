@@ -78,6 +78,7 @@ void main() {
         float smoothness = 0.0;
 
         #ifdef GB_TERRAIN
+            flags |= FLAG_TERRAIN;
             if (blockId == ID_LEAVES || blockId == ID_PLANT) flags |= FLAG_SSS;
             emissive = emissiveMask(albedo, emission, blockId == ID_FULL_GLOW);
         #endif

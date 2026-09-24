@@ -694,12 +694,17 @@ vec3 shadeHit(vec3 ro, vec3 dir, out float hitDist) {
     s.albedo = srgbToLinear(blockAlbedo(id, hn, uv, hb));
     s.normal = hn; s.geoNormal = hn;
     s.ao = PREVIEW_AO_ON ? previewAO(hb, hn, p) : 1.0; s.smoothness = 0.0; s.emissive = id == 7 ? 1.0 : 0.0;
-    s.flags = id == 5 ? FLAG_SSS : 0;
+    s.flags = FLAG_TERRAIN | (id == 5 ? FLAG_SSS : 0);
     vec3 sp = p + hn * 0.01;
     // sky light: open above?
     ivec3 tb; vec3 tn; float tt;
-    // Vanilla-ish sky light: full where the column above is open, ~11/15 under a roof.
-    float sky = traceVoxels(sp, vec3(0.0, 1.0, 0.0), 24, tb, tn, tt) ? 0.7 : 1.0;
+    // Vanilla-ish sky light: full where the column above is open, ~11/15
+    // under a solid roof. Leaves take one level each (vanilla), so under a
+    // 2-block leaf roof (the canopy scene) the floor keeps 13/15, not the
+    // solid-roof 0.7 that gave forests half the game's sky fill (#99).
+    float sky = 1.0;
+    if (traceVoxels(sp, vec3(0.0, 1.0, 0.0), 24, tb, tn, tt))
+        sky = blockAt(tb) == 5 ? (blockAt(tb + ivec3(0, 1, 0)) == 5 ? 13.0 / 15.0 : 14.0 / 15.0) : 0.7;
     if (hb.x >= 6 && hb.x <= 11 && hb.z >= 6 && hb.z <= 11 && p.y < 68.0 && p.y > 64.5) sky = 0.45;
     // block light from the glowstone at (9.5, 65.5, 9.5)
     vec3 lp = vec3(9.5, 65.5, 9.5);
@@ -807,7 +812,7 @@ void main() {
     Surface s;
     s.albedo = srgbToLinear(alb); s.normal = n; s.geoNormal = vec3(0.0, 1.0, 0.0);
     s.light = vec2(0.0, 1.0); s.ao = 1.0; s.emissive = 0.0;
-    s.flags = isMetal == 1 ? FLAG_METAL : 0;
+    s.flags = FLAG_TERRAIN | (isMetal == 1 ? FLAG_METAL : 0);
     s.smoothness = generatedSmoothness(alb, contrast, isMetal == 1);
     vec3 c = shadeSurface(s, vec3(1.0), vec3(0.0), 0.0);
     if (s.smoothness > 0.01) c += specularLighting(s, -dir, vec3(1.0));

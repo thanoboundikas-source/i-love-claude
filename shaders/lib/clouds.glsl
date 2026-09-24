@@ -62,10 +62,17 @@ vec3 cloudFaceLight(vec3 n, vec3 viewDir, float sunShadow) {
     // cloud's thickness between it and the sun, so it gets 0.13: seen
     // toward the sun, sun-averted sides then read as lighter strips over
     // darker undersides instead of one flat plate (DECISIONS #92). A low
-    // sun (golden hour, sunset) and the moon keep 0.22.
+    // sun (golden hour, sunset) and the moon keep 0.22. Only with blocky 3D
+    // clouds: the flat layer (POTATO, 3D clouds off) is nothing but
+    // underside, has no sides to read against and would only turn greyer
+    // (#98). With 3D clouds on, the flat fallback used for reflections keeps
+    // 0.13, matching the 3D undersides on screen next to it.
     float sunLit = step(0.0, dot(lightDir, sunDir));
     float glow = 1.0 + 1.2 * sunsetF * sunLit;
-    float scatter = n.y < -0.5 ? mix(0.22, 0.13, smoothstep(0.10, 0.35, lightDir.y) * sunLit) : 0.22;
+    float scatter = 0.22;
+    #ifdef CLOUDS_VOLUMETRIC
+        if (n.y < -0.5) scatter = mix(0.22, 0.13, smoothstep(0.10, 0.35, lightDir.y) * sunLit);
+    #endif
     vec3 light = directLight * glow * (max(ndl, 0.0) * sunShadow + scatter);
 
     // Sky light, much weaker than the sun: tops see the zenith, undersides

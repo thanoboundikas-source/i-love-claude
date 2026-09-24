@@ -43,8 +43,10 @@ float toeCurve(float x, float gate) {
 // Daytime surface only (gate = night / underground): torch- and lava-lit
 // caves and the night sky are left alone. surface = 0 for the sky, the
 // sun, the moon and clouds seen against the sky (depth 1 in final; final
-// averages the mask over a 3x3 box so TAA jitter cannot flicker it, and
-// clouds composited over far terrain count as surface), so the sunset band
+// averages the mask over a 3x3 box, which keeps TAA-jitter flicker along
+// silhouettes to at most 1/3 of the tint on straight edges and about 5/9
+// at convex corners, ~1-2 levels; clouds composited over far terrain
+// count as surface), so the sunset band
 // and the sun halo are never warmed or cooled. Already-blue surface pixels
 // are never cooled further.
 vec3 splitTone(vec3 c, float gate, float surface) {

@@ -6,9 +6,10 @@
       R, G = octahedral world-space normal
       B    = block light (bits 8-15) | sky light (bits 0-7)
       A    = bit 15: 0 (not translucent layer)
-             bits 8-14: smoothness (7 bits)
+             bit 14:    FLAG_TERRAIN (unpacked as flag bit 4)
+             bits 8-13: smoothness (6 bits)
              bits 4-7:  emissive strength (4 bits)
-             bits 0-3:  flags (FLAG_*)
+             bits 0-3:  flags (FLAG_SSS .. FLAG_UNLIT)
 
     Translucent layout (written by gbuffers_water after the deferred pass,
     over the same buffer; only trusted where depthtex0 < depthtex1):
@@ -24,6 +25,11 @@ const int FLAG_SSS   = 1;   // foliage / thin plants: light passes through
 const int FLAG_METAL = 2;   // generated specular says "metal"
 const int FLAG_HAND  = 4;   // held item: skip shadow map, depth is fake
 const int FLAG_UNLIT = 8;   // outlines, leashes: albedo shown as-is
+// Terrain (gbuffers_terrain): its faces are axis-aligned, so the block face
+// can be recovered from a bumped normal (lighting.glsl terrainFaceNormal).
+// Entities, block entities and the held item are not: rotated mobs, signs
+// and banners must be lit and shadowed by their own normal (DECISIONS #97).
+const int FLAG_TERRAIN = 16;
 
 const int MAT_NONE  = 0;
 const int MAT_WATER = 1;
@@ -60,16 +66,17 @@ vec2 unpackLight(float f) {
 }
 
 float packMaterial(float smoothness, float emissive, int flags) {
-    int s = int(clamp(smoothness, 0.0, 1.0) * 127.0 + 0.5);
+    int s = int(clamp(smoothness, 0.0, 1.0) * 63.0 + 0.5);
     int e = int(clamp(emissive, 0.0, 1.0) * 15.0 + 0.5);
-    return intToUnorm16((s << 8) | (e << 4) | (flags & 15));
+    int t = (flags & FLAG_TERRAIN) != 0 ? 16384 : 0;
+    return intToUnorm16(t | (s << 8) | (e << 4) | (flags & 15));
 }
 
 void unpackMaterial(float m, out float smoothness, out float emissive, out int flags) {
     int iv = unorm16ToInt(m);
-    smoothness = float((iv >> 8) & 127) / 127.0;
+    smoothness = float((iv >> 8) & 63) / 63.0;
     emissive = float((iv >> 4) & 15) / 15.0;
-    flags = iv & 15;
+    flags = (iv & 15) | ((iv & 16384) != 0 ? FLAG_TERRAIN : 0);
 }
 
 vec4 packOpaque(vec3 normal, vec2 blockSky, float smoothness, float emissive, int flags) {

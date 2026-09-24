@@ -81,15 +81,27 @@ vec3 blockLightColor(vec3 tint, float tintWeight, float b) {
     return c;
 }
 
-// The block face a (possibly bumped) normal belongs to. Terrain faces are
-// axis-aligned and generated bevels tilt them by well under 45 degrees, so
-// the largest axis is the face. Normals far from every axis (rotated entity
-// faces, very strong bevels) blend back to themselves: no hard switch.
+// The block face a (possibly bumped) terrain normal belongs to. Terrain
+// faces are axis-aligned and generated bevels tilt them by well under 45
+// degrees, so the largest axis is the face. Normals far from every axis
+// (cross-shaped plants, very strong bevels) blend back to themselves: no
+// hard switch. Only valid for terrain: a mob turned 20 degrees, a sign or
+// banner at a 22.5-degree step or the held item would be snapped to the
+// nearest world axis (lit as that face near the terminator), so those
+// keep their own normal (surfaceFaceNormal, FLAG_TERRAIN, DECISIONS #97).
 vec3 terrainFaceNormal(vec3 n) {
     vec3 an = abs(n);
     vec3 axisN = an.y >= max(an.x, an.z) ? vec3(0.0, sign(n.y), 0.0)
                : (an.x >= an.z ? vec3(sign(n.x), 0.0, 0.0) : vec3(0.0, 0.0, sign(n.z)));
     return normalize(mix(n, axisN, smoothstep(0.75, 0.90, max(an.x, max(an.y, an.z)))));
+}
+
+// The unbumped face of a surface: recovered for terrain (the only thing
+// with generated normals), the normal itself for everything else
+// (entities, block entities, the hand, and the forward paths, whose
+// normals are unbumped: glass faces, or the light direction for particles).
+vec3 surfaceFaceNormal(vec3 n, int flags) {
+    return (flags & FLAG_TERRAIN) != 0 ? terrainFaceNormal(n) : n;
 }
 
 // Low-sun key lift (GOLDEN_LIFT, percent; 0 = off). With the sun a few
@@ -116,7 +128,7 @@ float goldenLift() {
 // stained glass can tint it), already including the leak guard.
 vec3 shadeSurface(Surface s, vec3 shadow, vec3 blockTint, float blockTintWeight) {
     float NdotL = dot(s.normal, lightDir);
-    float faceL = saturate(dot(terrainFaceNormal(s.normal), lightDir));
+    float faceL = saturate(dot(surfaceFaceNormal(s.normal, s.flags), lightDir));
     float diffuse = min(saturate(NdotL) + max(pow(faceL, 1.0 - goldenLift()) - faceL, 0.0), 1.0);
 
     #ifdef FOLIAGE_SSS

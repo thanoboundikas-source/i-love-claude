@@ -192,12 +192,20 @@ are preserved in git history, commit d1cb592.)
     (derived from the distortion), larger on surfaces at grazing angles to the
     light, plus a tiny depth bias. No constant world-space offset, so contact
     shadows stay tight near the player.
+    *Changed 2026-09-24 (fifth review), see #96:* the offset (and the new
+    receiver plane) use the block face, not the generated bevel.
 35. **Soft shadows = rotated Vogel-disk PCF on hardware 2x2 comparisons**
     (4/8/16 taps POTATO-less/REGULAR/INSANE), penumbra ~0.08 blocks (option),
     never below ~1.2 texels so far shadows don't alias. Rotation changes per
     pixel and per frame; TAA resolves it. **No PCSS** (contact-hardening):
     it needs raw depth reads next to hardware comparisons (a required feature
     flag, extra blocker-search taps) — not worth the cost/risk on GL 4.1.
+    *Changed 2026-09-24 (fifth review), see #96:* the 0.08-block disk is
+    wider than the normal offset near the player, and every tap was
+    compared at the centre's depth, so on the side toward the light the
+    taps landed inside the receiver: sunlit ground within ~15-20 blocks
+    lost 8-25% of its key at sun heights 6-45 degrees. Each tap is now
+    compared against the receiver's own plane at that tap.
 36. **Light leaks**: direct light is multiplied by a sky-light guard
     (smoothstep 0.03..0.30 of the lightmap sky level). Sealed caves have no sky
     light, so no sun can leak in even where the shadow map is coarse.
@@ -677,6 +685,9 @@ against 0.40) was already there before this round.
     resolved (neither was #73): 12 samples over 48 blocks cannot resolve a
     1-block window beam; in-room beams stay invisible. The preview traces
     each neighbour as its own ray; the game bilinear-samples the buffer.
+    (*Note, fifth review, #95:* with a scaled effects buffer that bilinear
+    centre broke #83's cap; the centre is now rebuilt at the pixel's own
+    depth.)
     *Correction 2026-09-24 (third review), see #83:* the deficit makes
     depth edges harmless only in open air, where every deficit is 0. The
     deficit grows with the ray's length, so in shadowed air a short ray to
@@ -825,7 +836,11 @@ warnings; Apple GL 2497 and Iris patcher stage 193, 0 failed.
     shadowed fraction x the centre's depth); a shorter neighbour keeps
     its own deficit; and the result is clamped to the centre ray's own
     light (depth - deficit). Open air still gives 0; a fully shadowed ray
-    can never glow; a real beam between shadowed rays of similar length
+    can never glow (*correction, fifth review, #95:* only at full-resolution
+    effects, INSANE; with a scaled colortex4, REGULAR, the bilinear centre
+    mixed a near object's short ray into the far pixels beside it, so fully
+    shadowed air around near silhouettes got a 1-3 px rim and "the far side
+    of a near dark object gets no rim" did not hold there; fixed in #95); a real beam between shadowed rays of similar length
     is unchanged. Cost: 4 texelFetch of depthtex0 and 4 screenToView in
     composite1; no pass, buffer or loop. (*Correction, fourth review, #90:*
     what this guarantees is that no pixel glows more than its own ray's
@@ -932,6 +947,13 @@ warnings; Apple GL 2497 and Iris patcher stage 193, 0 failed.
       gives +3% (+6% at sunset); neither closes the gap, both flatten the
       light. Kept: the darker shade is the cinematic contrast the owner
       asked for. The spec line in CLAUDE.md now says so.
+    - *Note 2026-09-24 (fifth review), see #99:* forest interiors, which
+      are all shade, take the whole of that contrast and were never
+      measured here: at noon and in the morning a forest under a 2-block
+      leaf roof is 28-43% darker than pre-v2 and its floor (L 34) about as
+      bright as moonlit open ground (32.7). The "5:1" of the spec is the
+      lighting ratio; on screen, after the toe, lit to shaded grass is
+      ~10:1 in linear values.
     - Rain: saturation 0.31 / 0.27 (pre-v2 0.24 / 0.19, so +0.07); the
       #67 ">= 0.40" was on the green grass. Rain mean 47 / 46 vs pre-v2
       69 / 70: darker, the old fog wash is gone; first knob if Chris
@@ -998,7 +1020,11 @@ noon R mean -16.2%). Comparison sheet: previews/round3_compare.png.
     Now lighting.glsl recovers the face (terrainFaceNormal: the largest
     axis, blended back to the normal itself when no axis dominates,
     smoothstep 0.75-0.90 of the largest component, so rotated entity faces
-    never switch), lifts the face and keeps the bump linear:
+    never switch; *correction, fifth review, #97:* they did not switch, but
+    faces within ~25 degrees of an axis were snapped to it, so turned mobs,
+    signs, banners and the hand were lit as their nearest world face near
+    the terminator; the recovery is now for terrain only, FLAG_TERRAIN),
+    lifts the face and keeps the bump linear:
     diffuse = min(saturate(N.L) + max(pow(faceL, 1 - lift) - faceL, 0), 1).
     The cap keeps particles (normal = light direction) and bevels facing a
     low sun at the full key. deferred1's shadowFor tests max(bumped, face)
@@ -1015,7 +1041,8 @@ noon R mean -16.2%). Comparison sheet: previews/round3_compare.png.
     percent. 0 = off: final.fsh then uses FILMIC_GOLDEN_GAIN 1.40 (#69's
     exposure), so golden hour is not darker with it off (sweep 6 degrees
     ground 50.9 vs 52.1 on; sunlit grass (54,66,33), not golden, the #69
-    look). check.sh flips it to 0 and 85. Not tested: entities and
+    look). check.sh flips it to 0 and 85. Not tested: entities (*since
+    #97 they use their own normal*) and
     NORMAL_STRENGTH 200, where bevels past ~41 degrees blend partly back to
     the bumped normal (confirm in game).
 88. **Morning and afternoon were underexposed (the "lighting" complaint).**
@@ -1102,13 +1129,24 @@ noon R mean -16.2%). Comparison sheet: previews/round3_compare.png.
     silhouette, kept) and radial streaks from the lake's hills at sunset
     (24); noon <= 0.03 mean, night <= 0.02. Fully shadowed rays: a debug
     render of the canopy flags every pixel whose own ray is fully shadowed
-    (58-93% of them at noon and morning); none gets any shaft value. At
+    (58-93% of them at noon and morning); none gets any shaft value
+    (*correction, fifth review, #95:* the preview and this debug render
+    trace each pixel as its own full-resolution ray, the INSANE path; with
+    a scaled effects buffer fully shadowed air beside near silhouettes got
+    a 1-3 px rim, now 3-5x brighter at the new strength, until #95). At
     golden hour no canopy ray is fully shadowed (the sun streams in under
     the roof), so trunks beside the bright opening get the glow of the lit
     air in front of them (trunk pixels mean +2.1 / p95 11 / max 58 levels,
     max channel): a soft haze round the opening, not a rim on shaded
     trunks. Accepted; confirm in a forest at golden hour, and Godray
-    Strength 75% is the knob if it reads milky. Menu text: "Shafts of
+    Strength 75% is the knob if it reads milky. (*Note, fifth review, #99:*
+    what this delivers is shafts under canopies toward a low sun. A lone
+    tree or hill against a low sun gives at most glare along its sunlit
+    silhouette, world/hut/lake toward-sun tiles on-off mean <= 0.28
+    levels: its shadow is too small a part of a 48-block, 12-sample ray,
+    and next to the sun the sky is brighter than any shaft. The canopy
+    numbers above were measured with too little sky light under the roof;
+    #99 re-measures them.) Menu text: "Shafts of
     light ... where trees and terrain break it up (never a haze over open
     ground)".
     Honesty fix (CLAUDE.md Atmosphere line, godrays.glsl, #77 / #83
@@ -1131,7 +1169,10 @@ noon R mean -16.2%). Comparison sheet: previews/round3_compare.png.
     flips the whole edge row, which is 3 of the plus's 5 taps (0.6 of the
     flip, 1.8 R / 2.0 B levels), not 1/5. Now a 3x3 box average (fixed
     loop bounds, 9 texelFetch, 8 more than HEAD, cached): at most 3 of 9
-    taps flip for a row or a diagonal, so at most 1/3 (1.0 R / 1.1 B
+    taps flip for a row or a diagonal (*correction, fifth review, #100:* a
+    convex corner such as a roof corner against the sky moves diagonally by
+    up to ~0.8 px over the Halton set and flips an L of 5 taps, about 5/9,
+    ~1.7 R / 1.8 B levels, 3.3 / 3.7 at 200%), so at most 1/3 (1.0 R / 1.1 B
     levels at the default strength, 2.0 / 2.3 at 200%). Preview (no
     jitter): sky interior bit-identical with SPLIT_TONING on and off; the
     sky's border within 2 px of geometry changes by at most 2 levels (mean
@@ -1154,7 +1195,11 @@ noon R mean -16.2%). Comparison sheet: previews/round3_compare.png.
     darker undersides), morning 192 -> 176; underside colour (163,183,225)
     -> (155,176,221), still sky-blue (saturation 0.28 -> 0.30), not grey;
     sunset medians 182 / 176 -> 179 / 173 (the #89 fill and key colours),
-    dusk within 2 levels, night identical; clouds seen from above (tops,
+    dusk within 2 levels, night identical (*correction, fifth review, #98:*
+    this also hit the flat cloud layer, which is nothing but underside:
+    POTATO, CLOUDS_3D off and the analytic reflection turned 12-13 levels
+    greyer at noon and in the morning with no sides gained; the darker
+    underside is now only for 3D clouds); clouds seen from above (tops,
     unchanged by this entry): at most 10 levels at sunset / dusk and 3 in
     the morning (the #89 colours), noon and night identical.
 93. **The moonlit night tint belongs to the Cinematic Tone Curve.** It ran
@@ -1175,3 +1220,183 @@ noon R mean -16.2%). Comparison sheet: previews/round3_compare.png.
     canopy (godrays) and noon clouds, both views each. Unchanged blind
     spots: the preview has no TAA jitter (#91 is reasoned, not rendered),
     no entities (#87's blend), no Nether/End (#93), no real forest (#90).
+
+### Fifth review fixes (godray rims at scaled effects, shadow self-shadowing, entity faces, 2026-09-24)
+
+A technical and a visual re-check of the fourth round (10ba2bb) found one
+blocking problem, godray rims round near silhouettes whenever the effects
+buffer is smaller than the screen (REGULAR), and seven minor ones. All
+fixed or documented below. Chris's INSANE image in the preview is
+bit-identical to 10ba2bb in every scene (world, hut, lake, snow, canopy,
+sky, clouds, clouds_above, clouds_flat, pbr) when both are rendered with
+the same preview: #95 only runs with a scaled buffer, #96 needs the real
+shadow map, #97 changes nothing for terrain, and #98 only the flat layer
+with 3D clouds off. What changes in game: REGULAR godrays (#95), sunlit
+ground near the player (#96, brighter and even), turned mobs, signs,
+banners and the held item near the terminator (#97), POTATO / CLOUDS_3D-off
+clouds (#98). check.sh: 82 configs, 2561 compiles, 0 errors / 0 warnings;
+Apple GL 2561 and Iris patcher stage 193, 0 failed. Models and scripts:
+the session scratchpad r5/ (halo.py, shadow/rp.py, shadow/step.py).
+
+95. **Godrays: the centre ray at a scaled effects buffer (blocking).**
+    composite1 fetched the centre deficit with a bilinear
+    `texture(colortex4, texcoord).a`, but the effects pass point-samples
+    depth once per low-res texel and godrayShafts caps the glow at
+    `dc - centre` with dc from this pixel's own full-res distance. With
+    colortex4 at 0.375 (REGULAR) or any RENDER_SCALE below 100, a far
+    pixel next to a near trunk mixed the trunk's short, small deficit into
+    its centre, `dc - centre` went positive although its own ray was fully
+    shadowed, and fully shadowed air beside every near silhouette got a
+    1-3 px glowing rim, 3-5x brighter since #90's x3 strength. That broke
+    #83's "the far side of a near dark object gets no rim" and #90's "a
+    fully shadowed ray never glows" everywhere but INSANE; the preview and
+    #90's debug render trace every pixel at full resolution and could not
+    show it. Fix (godrayCentre in composite_water.fsh, only compiled with
+    RENDER_SCALE < 100 or HALF_RES_FX): of the 4 effects texels around the
+    pixel, only those whose own depth sample (the texel composite read) is
+    within 10% of this pixel's distance are interpolated with their
+    bilinear weights (the nearest one when none is), and what is
+    interpolated is each ray's shadowed fraction, deficit / its own
+    optical depth, rescaled to this pixel's optical depth. A pixel whose
+    same-depth rays are all fully shadowed then gets exactly dc: no glow.
+    The reviewer's version (bilinear when all 4 are within 10%, else the
+    nearest texel's raw deficit) was tested in the same 1D model of the
+    exact shaft step (1920 px, taps at +-1.5% / +-4%): it fixes the trunk
+    rim but not a narrow gap, because the picked texel's raw deficit
+    belongs to a ray of another length. Max glow on fully shadowed pixels,
+    HEAD / reviewer / this, at 0.375: shadowed trunk 3 blocks against
+    shadowed air at 40, 0.281 / 0 / 0 (4 px); same with the air at vis 0.7
+    (a golden-hour forest) 0.129 / 0 / 0; a 2 px gap of far air between
+    two near trunks, all shadowed, 0.346 / 0.346 / 0; receding shadowed
+    ground 4-48 blocks 0 / 0 / 0. At 0.75 HEAD's rim is 0.043, the others
+    0. A real 60 px lit beam in shadowed air keeps its peak, 0.381 at every
+    scale; its edge spills into the shadowed air beside it by 1-2 px (0.119
+    at 0.375, 0.048 at 0.75), which is the low-res buffer's own blur,
+    stated as such in godrays.glsl and CLAUDE.md. A noisy forest (vis
+    0.6-0.8 behind a shadowed trunk): max 0.101 against 0.099 at full res
+    (HEAD bilinear 0.176). INSANE takes the #else path: bit-identical.
+    Cost, REGULAR only: 4 texelFetch of colortex4 and of depthtex0, 4
+    screenToView and 4 mat3 products, instead of one bilinear fetch; no
+    pass, buffer or loop bound (the loop is a fixed 4). Wording now says
+    what holds where (CLAUDE.md, godrays.glsl, #83, #90).
+96. **Shadow filter self-shadowing of sunlit ground.** The Vogel disk
+    (0.08 blocks) is wider than the normal offset near the player (~0.04-
+    0.05 blocks at 4096 / 192), and every tap was compared at the centre's
+    depth, so on the side toward the light the taps landed inside the
+    receiver's own plane. Reviewer's exact model (radial distortion, depths
+    at texel centres, hardware 2x2 LEQUAL, 16 taps, rotations averaged as
+    a TAA stand-in), re-run here with Iris's default shadow depth range
+    (+-render distance x 16, RD 12): flat sunlit ground visibility at 0.5 /
+    3 / 6 / 10 / 15 / 20 / 30 blocks, 6 degrees 0.85 / 0.82 / 0.92 / 0.88 /
+    0.96 / 0.95 / 1.00, 20 degrees 0.83 / 0.89 / 0.88 / 0.97 / 0.97 / 1.00 /
+    1.00, 35 degrees 0.86 / 0.95 / 0.97 / 0.96 / 1.00 ..., 60 degrees 1.00;
+    plus a sawtooth at the shadow-texel spacing. GOLDEN_LIFT and #88 made
+    that key on block tops ~4x more important at a low sun, and the
+    preview (voxel-traced shadows) could not show it. Fix
+    (shadowVisibility): each tap is compared against the receiver's own
+    plane at the tap, clip.z + dot(dzdxy, o), with dzdxy = -nS.xy / nS.z
+    scaled by shadowProjection[2][2] / [0][0] and / [1][1], nS the face
+    normal in shadow view space; |nS.z| >= 0.02 with its sign kept (the
+    slope does not depend on which side the normal points, so back faces
+    of leaves read their own plane too). deferred1 now passes the block
+    face as geoNormal (terrainFaceNormal for terrain, #97), so the offset
+    and the plane follow the real geometry, not the generated bevel (bevels
+    tilted +-30 degrees got 0.74-0.77). Model after: 1.00 at every
+    distance at 3, 6, 12, 20, 35 and 60 degrees, RD 12 and 32. A 1-block
+    step's shadow at 6 and 20 degrees: inside the shadow and across the
+    penumbra identical to before (e.g. 0.80 / 0.63 / 0.48 / 0.31 at the
+    6-degree edge), the contact edge stays 0.00, lit ground and the step
+    top 0.80-0.88 -> 1.00. The reviewer's first-person scratch preview with
+    this model: near-ground luma -5% at 12 and 20 degrees with HEAD's
+    filter, and equal to a filter with no self-shadowing after the fix.
+    Particles pass the light direction (no slope: unchanged); water and
+    glass pass their flat face. Not rendered with a real shadow map (the
+    preview has none): confirm in game on flat sand or grass at a morning
+    sun that near ground is evenly lit with no stripes and contact shadows
+    at block bases are still tight.
+97. **The block face is recovered only for terrain.** #87's
+    terrainFaceNormal snapped any normal within ~25 degrees of an axis to
+    that axis, including the unbumped, rotated normals of entities, block
+    entities (signs and banners at 22.5-degree steps) and the held item,
+    which all write through gbuffers_solid with the same flags. Near the
+    terminator the golden lift then followed the axis face (reviewer's
+    model at 6 degrees: a mob side with true N.L -0.24 got 0.35 of the
+    key; a sun-facing one at N.L 0.21 got 0.21 instead of 0.56; 8.4% of
+    yaw / azimuth / side combinations off by more than 0.15 of the key),
+    and shadowFor's max() let away-facing faces read the shadow map. Now
+    gbuffers_terrain sets FLAG_TERRAIN, stored in bit 14 of colortex1.a
+    (smoothness 7 -> 6 bits: 64 levels over a generated range of 0-0.30,
+    metal 0.55-0.85, invisible), and lighting.glsl surfaceFaceNormal uses
+    terrainFaceNormal only for terrain; everything else lights and
+    shadow-tests with its own normal, so an entity face gets exactly
+    pow(N.L, 1 - lift) of the key and nothing at N.L <= 0. The forward
+    paths (glass: axis faces; particles: the light direction) and all
+    terrain are unchanged (preview pbr and world sheets bit-identical). The
+    reviewer's hand-only fix was the first step; the bit covers mobs and
+    block entities too at no cost.
+98. **The flat cloud layer keeps its old underside.** #92's darker
+    underside (sun scatter 0.13 instead of 0.22 with a high sun) is for
+    reading 3D clouds' sides against their undersides; the flat layer is
+    nothing but underside, so POTATO, CLOUDS_3D off and the analytic water
+    reflection turned 12-13 levels greyer at noon and in the morning with
+    nothing gained. Now only with CLOUDS_VOLUMETRIC. clouds_flat with 3D
+    clouds off vs 927811b: noon identical, morning at most 1 level, sunset
+    and dusk at most 4 (#89's colours), night and rain identical. With 3D
+    clouds on, the flat fallback used for reflections keeps 0.13, so it
+    still matches the 3D undersides on screen next to it (bit-identical to
+    10ba2bb).
+99. **Preview: vanilla sky light under leaves, and forest interiors
+    measured.** tools/preview.py gave every roof sky light 0.7 (~10.5/15);
+    in vanilla each leaf block takes one level, so the floor under the
+    canopy scene's 2-block roof is 13/15 and skyLightCurve (s^3) gets 0.65,
+    not 0.34: the forest rendered with half the game's sky fill, and shafts
+    looked stronger against it than in game. Now 14/15 under one leaf
+    block, 13/15 under two (or more), 0.7 under a solid roof. The pre-v2
+    scratch copy used for comparisons got the same change. It also
+    brightens the ground under the world scene's tree (1.8% of the world
+    sheet's pixels change, up to 18 levels). Canopy ground (bottom 45%),
+    old -> new sky light: noon L 24.8 -> 33.7, morning L 29.9 -> 40.7.
+    Re-measured #90 numbers, canopy toward the sun, godrays on - off, mean
+    / p99 / max levels: noon 0.02 / 0.7 / 1.0, morning 0.08 / 2.0 / 10.1,
+    golden am 0.95 / 13.6 / 41.7, golden pm 1.11 / 13.8 / 60.0 (a clear
+    beam under the sunward roof edge; 1.24 / 15.4 / 62.7 with the old sky
+    light); away from the sun <= 0.02 mean, max 1. World / hut / lake: no
+    tile above mean 0.28 or p99 5.3; the peaks are glare on sunlit crests
+    next to the sun disc (hut 36.5) and streaks from the lake's hills at
+    sunset (24), none a shaft from the lone tree. So godrays read under
+    canopies toward a low sun and nowhere else; CLAUDE.md and #90 now say
+    so (a lone tree's shadow is too small a part of a 48-block, 12-sample
+    ray, and next to the sun the sky outshines any shaft).
+    Forest interiors, now measured (frame mean luma, HEAD vs pre-v2 on the
+    same preview): noon L 31.1 vs 55.0 (-43%), R 53.8 vs 74.4 (-28%);
+    morning 40.5 / 42.0 vs 61.4 / 62.2 (-34% / -33%); golden am / pm -11%
+    / -23% and -26% / -6%. Forest floor at noon L 33.7, against 32.7 for
+    the world's moonlit night ground. That is the documented 5:1 fill and
+    the daytime toe (#67, #85) in a scene that is all shade; open scenes
+    in clear weather stay +9% to -19% of pre-v2. The 5:1 is the lighting
+    ratio; on screen lit grass (98,126,56) to shaded (28,39,24) is ~10:1
+    in linear. Kept as the look (Chris asked for contrast); written into
+    the CLAUDE.md spec and #85. Knobs if Chris finds forests too dark:
+    ambDay x0.40 -> x0.46 (sky.glsl) lifts all shade, forest floor +7-8%,
+    open ground +2-4% (measured); more targeted would be a daytime
+    exposure lift keyed on eyeBrightnessSmooth (eye sky light ~0.80-0.95),
+    built like the underground gain. Confirm in an oak forest at noon.
+    The #85 acceptance list with the new sky light (pre-v2 re-rendered the
+    same way): 34 / 38, the three known misses (night mean +9.9 / +8.8%,
+    noon R mean -16.2%) plus sunset R p90/p10 1.93 against 2.0 (pre-v2
+    1.42). That miss is the measurement, not the code: the shade under the
+    tree in that tile is now game-like and brighter (10ba2bb scores the
+    same 1.93 with this preview, 2.07 with the old one).
+100. **Wording.** CLAUDE.md's godray line said "clearly visible under
+    trees and at tree or hill edges toward a low sun"; true under a
+    canopy only (#99). The sky-mask texts (CLAUDE.md, final.fsh,
+    tonemap.glsl, #91) said the 3x3 box means TAA jitter "cannot flicker
+    it" and "at most 3 of 9 taps": that holds for straight edges and
+    diagonals, but a convex corner moves diagonally by up to (0.81, 0.78)
+    px over the Halton set and flips an L of 5 taps, ~5/9 of the tint
+    (~1-2 levels at the default strength, 3-4 at 200%). Golden Hour
+    Light's menu text said "0% = off (the image is brightened instead)",
+    but the brightening (FILMIC_GOLDEN_GAIN 1.40) sits inside
+    FILMIC_CURVE; it now says "with the Cinematic Tone Curve on".
+    previews/round3_compare.png regenerated from this commit (the old
+    look re-rendered with the same preview, including #99's sky light).

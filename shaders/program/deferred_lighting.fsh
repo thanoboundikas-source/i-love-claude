@@ -51,7 +51,9 @@ vec3 shadowFor(Surface s, vec3 playerPos, bool isHand) {
         // Faces turned from the light get no direct light. A bump bevel that
         // tilts away from a low sun on a sunlit face still gets the face's
         // lifted key (lighting.glsl), so it must still read the shadow map.
-        float ndl = max(dot(s.normal, lightDir), dot(terrainFaceNormal(s.normal), lightDir));
+        // (s.geoNormal is that face: terrainFaceNormal for terrain, the
+        // normal itself for entities and block entities.)
+        float ndl = max(dot(s.normal, lightDir), dot(s.geoNormal, lightDir));
         if (ndl <= 0.0 && (s.flags & FLAG_SSS) == 0) return vec3(0.0);
         float fade = shadowEdgeFade(playerToShadowClip(playerPos));
         vec3 vis = vec3(1.0);
@@ -84,9 +86,12 @@ void main() {
         s.albedo = srgbToLinear(albedoAo.rgb);
         s.ao = albedoAo.a;
         s.normal = octDecode(data.rg);
-        s.geoNormal = s.normal;
         s.light = unpackLight(data.b);
         unpackMaterial(data.a, s.smoothness, s.emissive, s.flags);
+        // The unbumped face (the block face for terrain): the shadow map's
+        // normal offset and receiver plane follow the real geometry, not
+        // the generated bevel (lib/shadows.glsl, DECISIONS #96).
+        s.geoNormal = surfaceFaceNormal(s.normal, s.flags);
 
         bool isHand = (s.flags & FLAG_HAND) != 0;
         if (isHand) viewPos = screenToViewHand(texcoord, depth);

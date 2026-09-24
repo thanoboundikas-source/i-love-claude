@@ -50,6 +50,53 @@ float godrayTapDist(vec2 uv) {
     float d = texelFetch(depthtex0, clamp(ivec2(uv * vec2(size)), ivec2(0), size - 1), 0).r;
     return d >= 1.0 ? 1e4 : length(screenToView(uv, d));
 }
+
+// The centre pixel's shadow deficit. At full-resolution effects (INSANE)
+// the effects texel is this pixel's own ray. With a smaller effects buffer
+// (REGULAR, any RENDER_SCALE below 100, HALF_RES_FX) a plain bilinear fetch
+// mixes a near object's short ray into the far pixels beside it, and the
+// cap in godrayShafts (this pixel's own light) no longer matches: fully
+// shadowed air around every near silhouette got a 1-3 px glowing rim
+// (DECISIONS #95). So the 4 effects texels around the pixel are compared
+// with this pixel by the depth the effects pass read for them: only those
+// within 10% of this pixel's distance are interpolated (bilinear weights;
+// the nearest one if none is), and what is interpolated is each ray's
+// shadowed fraction (deficit / its own optical depth), rescaled to this
+// pixel's optical depth. A pixel whose same-depth rays are all fully
+// shadowed then gets exactly its own optical depth as deficit: no glow.
+float godrayCentre(vec2 uv, float dist) {
+    #if RENDER_SCALE < 100 || defined HALF_RES_FX
+        ivec2 fxSize = textureSize(colortex4, 0);
+        ivec2 size = ivec2(viewWidth, viewHeight);
+        vec2 f = uv * vec2(fxSize) - 0.5;
+        ivec2 i0 = ivec2(floor(f));
+        vec2 fr = f - floor(f);
+        float sumW = 0.0;
+        float sumF = 0.0;
+        float best = 1e9;
+        float bestF = 0.0;
+        for (int k = 0; k < 4; k++) {
+            ivec2 o = ivec2(k & 1, k >> 1);
+            ivec2 c = clamp(i0 + o, ivec2(0), fxSize - 1);
+            // The same depth texel the effects pass (composite_fx.fsh) read for c.
+            vec2 cuv = (vec2(c) + 0.5) / vec2(fxSize);
+            float d = texelFetch(depthtex0, clamp(ivec2(cuv * vec2(size)), ivec2(0), size - 1), 0).r;
+            vec3 cv = screenToView(cuv, d);
+            float cd = d >= 1.0 ? 1e4 : length(cv);
+            // Its march length, measured as the effects pass did (player space).
+            float rayLen = d >= 1.0 ? 1e4 : length(viewToPlayer(cv));
+            float frac = saturate(texelFetch(colortex4, c, 0).a / max(godrayDepthTerm(rayLen), 1e-5));
+            float e = abs(cd - dist) / max(dist, 1e-3);
+            float w = (o.x == 1 ? fr.x : 1.0 - fr.x) * (o.y == 1 ? fr.y : 1.0 - fr.y) * (e < 0.1 ? 1.0 : 0.0);
+            sumW += w;
+            sumF += w * frac;
+            if (e < best) { best = e; bestF = frac; }
+        }
+        return godrayDepthTerm(dist) * (sumW > 1e-3 ? sumF / sumW : bestF);
+    #else
+        return texture(colortex4, uv).a;
+    #endif
+}
 #endif
 
 void main() {
@@ -143,7 +190,7 @@ void main() {
             vec4 taps = vec4(texture(colortex4, u0).a, texture(colortex4, u1).a,
                              texture(colortex4, u2).a, texture(colortex4, u3).a);
             vec4 tapDist = vec4(godrayTapDist(u0), godrayTapDist(u1), godrayTapDist(u2), godrayTapDist(u3));
-            float shafts = godrayShafts(texture(colortex4, texcoord).a, taps, tapDist, dist);
+            float shafts = godrayShafts(godrayCentre(texcoord, dist), taps, tapDist, dist);
             vec3 dirW = normalize(viewDirToWorld(viewPos0));
             color += godrayLight(shafts, dirW);
         }

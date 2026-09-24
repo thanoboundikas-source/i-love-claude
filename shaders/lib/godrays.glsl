@@ -59,7 +59,14 @@ float godrayAmount(vec3 playerEnd, float jitter) {
 //
 // What this guarantees: no pixel glows more than the light its own ray
 // receives (optical depth minus its deficit), so a fully shadowed ray
-// never glows. What it does not: the glow marks where the deficit changes
+// never glows. That holds exactly at full-resolution effects (INSANE:
+// RENDER_SCALE 100, HALF_RES_FX off), where the centre is the pixel's own
+// ray. With a scaled effects buffer composite1 rebuilds the centre from
+// the low-res rays at the pixel's own depth (godrayCentre in
+// composite_water.fsh, DECISIONS #95): shadowed air beside near
+// silhouettes gets no rim, but a shaft's own edge is only as sharp as the
+// buffer, so it spills 1-2 px into the fully shadowed air beside it.
+// What it does not guarantee: the glow marks where the deficit changes
 // most within GODRAY_FAR across the shafts, an edge detector, not a
 // comparison with the lit air beside a whole band. Inside a partly
 // shadowed band wider than ~4% of the screen, the pixels next to full

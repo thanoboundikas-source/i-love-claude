@@ -110,7 +110,7 @@ not show Iris INFO lines such as "Using shaderpack".
 - **Direction (Chris, 2026-09-24, first in-game test):** "very hazy", "make it
   more cinematic", "the lighting doesn't look good". Target: **clear and
   cinematic**. This replaces the old "Not filmic" line. Do not undo it in
-  later sessions (DECISIONS #67-94).
+  later sessions (DECISIONS #67-100).
 - Mood: Complementary Reimagined's colour. Bright, saturated, clean and
   vanilla-faithful in the brightness of sunlit surfaces, with cinematic
   contrast: deep, clean blacks that are never crushed, soft highlight
@@ -122,7 +122,9 @@ not show Iris INFO lines such as "Using shaderpack".
   scatter. Rain and thunder stay clearly foggy.
 - Lighting quality: Bliss/Photon level. A strong warm sun key (about 5600 K
   at noon, about 3100 K at the horizon) against a cooler, clearly darker sky
-  fill (about 5:1 sunlit to shaded tops at noon). Golden hour stays
+  fill (about 5:1 sunlit to shaded tops at noon in light; after the toe
+  about 10:1 in linear screen values, e.g. lit grass (98,126,56) against
+  shaded grass (28,39,24)). Golden hour stays
   directional down to the horizon and warm: the low sun's key is lifted on
   the block face (GOLDEN_LIFT; the generated bump stays linear on top, so
   sunlit ground never gets dark dashes) with sunlit grass golden and
@@ -130,14 +132,20 @@ not show Iris INFO lines such as "Using shaderpack".
   sunset sky fill (warm key / cool shade down to the horizon, #89). Sunlit
   ground at least as bright as the pre-v2 look and golden, shade deeper
   and clean (so the frame is ~10-25% darker than the veiled pre-v2 look,
-  #85), no pop at the sun/moon switch. With the sun 10-45 degrees
+  #85), no pop at the sun/moon switch. Forest interiors are all shade, so
+  they take the whole of that contrast: at noon and in the morning a
+  forest under a 2-block leaf roof is ~30-45% darker than pre-v2, and its
+  floor about as bright as moonlit open ground (#99). Kept as the look;
+  if Chris finds forests too dark, the first knob is ambDay x0.40 -> x0.46
+  (sky.glsl: forest floor +7-8%, open ground +2-4%). With the sun 10-45 degrees
   (morning and afternoon, hours of every day) sunlit ground is close to
   vanilla's brightness (matching it from ~20 degrees) and rises smoothly
   to noon, never a dull dip (#88). Night shade is dark but never pure
   black (at most ~3% of moonlit ground under 12/255), and moonlit ground
   reads cool blue-green, not olive (block light keeps its colour; the
   tint is part of FILMIC_CURVE, #93). Soft filtered shadows, no acne,
-  no light leaking, vanilla-strength corner AO in shade, warm ground
+  no self-shadowing of sunlit ground by the filter (receiver-plane taps,
+  #96), no light leaking, vanilla-strength corner AO in shade, warm ground
   bounce, coloured block light (hot core, amber falloff, levels 2-6 still
   readable in caves; warm torch/lava, cool soul fire).
 - Sky: deep clean blue with a narrow horizon band, crisp sun and moon with a
@@ -160,15 +168,24 @@ not show Iris INFO lines such as "Using shaderpack".
   (no bright band at the world edge). Godrays are shafts only where
   something casts a shadow (near 48 blocks): lit air next to shadowed air,
   found in screen space across the shafts, comparing rays over the
-  shorter of their two marches, and clearly visible under trees and at
-  tree or hill edges toward a low sun (#90). Never an open-air glow. What
-  the code guarantees: no pixel glows more than the light its own ray
-  receives, so a fully shadowed ray (a shaded trunk, a wall in shade)
-  never glows. What it does not: the glow marks where the shadow changes
-  most within ~4% of the screen across the shafts, so inside a partly
-  shadowed band wider than that, the pixels next to full shadow can glow
-  more than the fully lit air on the band's other side (known limit,
-  #90). Rain fog and wet look.
+  shorter of their two marches. Clearly visible under canopies toward a
+  low sun (forest roofs; the canopy test, #90). A lone tree or hill
+  against a low sun gives at most glare along its sunlit silhouette
+  (world/hut/lake toward-sun tiles: on-off mean <= 0.28 levels): its
+  shadow is too small a part of a 48-block, 12-sample ray, and next to
+  the sun the sky is brighter than any shaft. Never an open-air glow.
+  What the code guarantees: no pixel glows more than the light its own
+  ray receives, so a fully shadowed ray (a shaded trunk, a wall in shade)
+  never glows. That is exact at full-resolution effects (INSANE:
+  RENDER_SCALE 100, HALF_RES_FX off). With a scaled effects buffer
+  (REGULAR, any lower render scale) composite1 rebuilds each pixel's ray
+  from the low-res rays at its own depth, so shadowed air beside near
+  silhouettes gets no rim either, but a shaft's own edge spills 1-2 px
+  into the shadowed air beside it (#95). What it does not guarantee: the
+  glow marks where the shadow changes most within ~4% of the screen
+  across the shafts, so inside a partly shadowed band wider than that,
+  the pixels next to full shadow can glow more than the fully lit air on
+  the band's other side (known limit, #90). Rain fog and wet look.
 - Post: a hue-preserving cinematic tonemap (toe + soft shoulder, pivot 0.18;
   a gentler toe and a moonlit low-light tint at night / underground, both
   part of FILMIC_CURVE) with a fixed time-of-day exposure (night/underground
@@ -177,8 +194,10 @@ not show Iris INFO lines such as "Using shaderpack".
   around 20 degrees, x1.00 from ~53 so noon is unchanged). Split toning on
   the daytime surface only (warm lit / cool shade, never the sky, the sun,
   the moon or clouds seen against the sky, which are masked by depth over a
-  3x3 box so TAA jitter cannot flicker it along silhouettes; clouds over far
-  terrain are toned; never night or torch-lit caves), a subtle vignette, thresholded bloom (only real highlights glow:
+  3x3 box; that keeps the TAA-jitter flicker along silhouettes to at most
+  1/3 of the tint on straight edges and about 5/9 at convex corners, ~1-2
+  levels, #100; clouds over far terrain are toned; never night or
+  torch-lit caves), a subtle vignette, thresholded bloom (only real highlights glow:
   nothing below HDR 1.5, so snow and sand never veil), TAA with Catmull-Rom
   history clamped against ringing, light sharpening. Optional darken-only
   local contrast (off by default). Every grading feature has its own toggle
@@ -219,7 +238,11 @@ See `DECISIONS.md` for the why. Summary:
 Buffers (all sizes relative to the window):
 - `colortex0` RGBA8 — albedo (sRGB) + vanilla AO in alpha. Written by opaque gbuffers.
 - `colortex1` RGBA16 — opaque G-buffer: octahedral normal (R,G), block+sky
-  light (B, 8+8 bits), A = smoothness 7 | emissive 4 | flags 4, bit 15 clear.
+  light (B, 8+8 bits), A = FLAG_TERRAIN 1 (bit 14) | smoothness 6 |
+  emissive 4 | flags 4, bit 15 clear. FLAG_TERRAIN marks gbuffers_terrain
+  pixels: only their bumped normals may be snapped back to the block face
+  (lighting.glsl surfaceFaceNormal); entities, block entities and the hand
+  use their own normal (#97).
   After the deferred pass the same buffer holds the *translucent layer*
   written by `gbuffers_water` (normal, biome tint, sky light, material) with
   bit 15 set. Layout: `lib/encoding.glsl`.
@@ -242,8 +265,9 @@ Pass order (Overworld) and when each runs:
   always) → gbuffers translucent (water data or POTATO forward water, glass,
   particles, weather) → `composite` (SSR + godray march, scaled; WATER_REFLECTIONS
   or GODRAYS) → `composite1` (water shading, underwater fog, godray shafts
-  from 4 neighbour taps of colortex4.a plus depthtex0 at each tap; water
-  features or GODRAYS) → `composite2` (TAA) →
+  from 4 neighbour taps of colortex4.a plus depthtex0 at each tap; with a
+  scaled colortex4 the centre is rebuilt from the 4 effects texels at the
+  pixel's own depth, godrayCentre, #95; water features or GODRAYS) → `composite2` (TAA) →
   `final` (sharpen, local contrast, bloom, vignette, time-of-day exposure,
   tonemap + grade; reads a 3x3 box of depthtex0 for the split-toning sky
   mask).
@@ -262,7 +286,13 @@ preview grass was twice as green, so older numbers in DECISIONS read
 greener and brighter than the game). `snow` is the bloom test (snow-white
 ground must not bloom); `canopy` is the godray test (camera under a holed
 leaf roof: shafts only from lit holes and the roof's sunward edge, fully
-shadowed trunks must never glow). `pbr`'s last three rows (grass with the
+shadowed trunks must never glow). Sky light under leaves is vanilla-like
+(14/15 under one leaf block, 13/15 under two, 0.7 under a solid roof, #99;
+before 2026-09-24 every roof gave 0.7, so older canopy numbers are
+darker). The preview traces shadows through the voxels (no shadow map, so
+it cannot show shadow-filter artefacts such as #96) and traces godrays per
+pixel at full resolution (the INSANE path; REGULAR's scaled-buffer
+upsampling, #95, is modelled only). `pbr`'s last three rows (grass with the
 plains tint, sand, dirt) are golden hour with generated normals: sunlit
 ground must show no dark dashes. The
 HDR chain gives final.fsh a depthtex0 stand-in (sky mask) and mirrors

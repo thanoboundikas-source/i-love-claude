@@ -9,7 +9,9 @@
     tiny depth bias. Leaks: handled in lighting.glsl (sky-light guard).
     Filtering: SHADOW_SAMPLES rotated Vogel-disk taps, each a hardware 2x2
     comparison (shadowHardwareFiltering), rotated per pixel and per frame so
-    TAA turns the noise into smooth penumbrae.
+    TAA turns the noise into smooth penumbrae. Each tap is compared at the
+    depth of the receiver's own plane at that tap (receiver-plane depth), so
+    the filter disk never cuts into the surface it is lighting.
 
     Requires uniforms.glsl, settings.glsl, common.glsl.
 */
@@ -66,7 +68,8 @@ vec3 tapToScreen(vec3 clip) {
 
 // Soft, possibly coloured visibility of the light from a surface.
 //   playerPos  surface position in player space
-//   geoNormal  un-bumped world normal (for the offset)
+//   geoNormal  un-bumped world normal (the block face for terrain): the
+//              normal offset and the receiver plane
 //   noise      0..1 per-pixel rotation
 // Tap count is the compile-time macro SHADOW_TAPS (set by the program before
 // including this file; defaults to the SHADOW_SAMPLES option), so the loop
@@ -81,6 +84,21 @@ vec3 shadowVisibility(vec3 playerPos, vec3 geoNormal, float noise) {
     clip = playerToShadowClip(offsetPos);
     clip.z -= 0.00012;
 
+    // Receiver plane: how the surface's own depth changes across the shadow
+    // map. Every filter tap is compared against that plane at the tap, not
+    // against the centre's depth. Without it the 0.08-block disk (wider
+    // than the ~0.04-block normal offset near the player) reached into the
+    // surface itself on the side toward the light: sunlit ground within
+    // ~15-20 blocks lost 8-25% of its key at sun heights 6-45 degrees, with
+    // a faint sawtooth at the shadow-texel spacing (DECISIONS #96). Real
+    // casters are unaffected: they sit in front of the plane. The slope is
+    // the same whichever way the normal points, so the sign of nS.z is
+    // kept; |nS.z| >= 0.02 bounds it for faces edge-on to the light.
+    vec3 nS = mat3(shadowModelView) * geoNormal;
+    float nz = nS.z < 0.0 ? min(nS.z, -0.02) : max(nS.z, 0.02);
+    vec2 dzdxy = -nS.xy / nz
+               * vec2(shadowProjection[2][2] / shadowProjection[0][0], shadowProjection[2][2] / shadowProjection[1][1]);
+
     // Penumbra: SHADOW_SOFTNESS scales a ~0.08 block radius, never smaller
     // than ~1.2 texels so distant shadows stay smooth.
     float radiusWorld = max(0.08 * float(SHADOW_SOFTNESS) * 0.01, texelW * 1.2);
@@ -90,7 +108,7 @@ vec3 shadowVisibility(vec3 playerPos, vec3 geoNormal, float noise) {
     float opaque = 0.0;
     for (int i = 0; i < SHADOW_TAPS; i++) {
         vec2 o = vogel(i, SHADOW_TAPS, angle) * radiusClip;
-        opaque += texture(shadowtex1, tapToScreen(clip + vec3(o, 0.0)));
+        opaque += texture(shadowtex1, tapToScreen(clip + vec3(o, dot(dzdxy, o))));
     }
     opaque /= float(SHADOW_TAPS);
 

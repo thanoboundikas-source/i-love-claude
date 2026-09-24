@@ -65,7 +65,7 @@ option.AO_STRENGTH=Corner Shading
 option.AO_STRENGTH.comment=How dark block corners and crevices get in the shade (vanilla ambient occlusion). 50% = the old Solstice look, 0% = off.
 suffix.AO_STRENGTH=%
 option.GOLDEN_LIFT=Golden Hour Light
-option.GOLDEN_LIFT.comment=How much a low sun lights flat ground: golden sunlit grass at sunrise and sunset, and a brighter morning and afternoon. Shade stays cool. 0% = off (the image is brightened instead).
+option.GOLDEN_LIFT.comment=How much a low sun lights flat ground: golden sunlit grass at sunrise and sunset, and a brighter morning and afternoon. Shade stays cool. 0% = off (with the Cinematic Tone Curve on, the image is brightened instead).
 suffix.GOLDEN_LIFT=%
 option.sunPathRotation=Sun Path Angle
 option.sunPathRotation.comment=Tilts the path of the sun and moon so noon shadows are not straight down.
