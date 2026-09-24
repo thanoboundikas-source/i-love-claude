@@ -56,6 +56,9 @@ are preserved in git history, commit d1cb592.)
     corners. If Iris' separateAo does not activate (the docs mention a bug
     without a shadow pass, i.e. POTATO), AO falls back to vanilla's baked
     look — still correct, just applied to all light.
+    *Changed 2026-09-24, see #67:* AO is now squared, i.e. applied at
+    vanilla's visible strength (AO_STRENGTH, default 100; 50 = the old look; 0
+    = off), still only on sky/block light, never on direct light.
 12. **TAA jitter is gated on the TAA pass existing** (`TAA_JITTER`), so no
     intermediate build ever shakes.
 
@@ -65,10 +68,17 @@ are preserved in git history, commit d1cb592.)
     horizon, sunset toward/away from the sun, night) instead of Rayleigh/Mie
     scattering. Physically based skies trend toward the filmic/desaturated
     look the spec rules out, and a palette is trivially cheap and tunable.
+    *Changed 2026-09-24, see #67:* palette DAY_ZENITH (0.08,0.22,0.80),
+    DAY_HORIZON (0.34,0.56,1.00), SUNSET_ZENITH (0.07,0.13,0.44), horizon
+    falloff exp(-8h) (was -6h).
 14. **Sunset band hugs the horizon** (exp falloff ~9x faster than the day
     horizon gradient) and the zenith is blended to a blue-violet, so dawn and
     dusk are orange only near the sun and purple opposite it — never orange
     soup.
+    *Changed 2026-09-24, see #67:* SUNSET_AWAY (0.42,0.29,0.52) mixed 0.75
+    into the horizon, SUNSET_AFTERGLOW (0.66,0.26,0.42); the band is gated off
+    above sun elevation 0.32; sun halo pow8*0.04 + pow120*0.22 (was pow5*0.07
+    + pow60*0.30).
 15. **One palette drives everything**: sky, fog colour, sun/moon/ambient light
     and (next step) cloud lighting come from the same values, so terrain,
     fog and sky always agree.
@@ -91,11 +101,23 @@ are preserved in git history, commit d1cb592.)
     about 3:1 in linear light — brighter shade than Bliss/Photon, closer to
     Complementary's bright look while keeping depth. Ambient keeps vanilla's
     face shading (top 1.0, sides 0.8, bottom 0.6).
+    *Changed 2026-09-24, see #67:* noon key 1.42 x (1,0.91,0.78) warming to
+    (1,0.55,0.24) at the horizon (SUNLIGHT_NOON/GOLDEN, separate from the
+    sun-disc tint); fill 0.40 x (0.56,0.72,1.00), sunset fill 0.30 x
+    (0.62,0.56,0.84), night 0.040; about 5:1 sunlit:shaded tops; sun and moon
+    exactly 0 at elevation 0 (no switch pop); faces 1/0.70/0.40; BOUNCE_LIGHT;
+    rain direct 0.075, rain fill x0.95.
 21. **Block light curve** keeps a long gentle tail (levels 3–6 stay visible)
     with a hot core near torches; warm torch colour (1.0, 0.6, 0.3).
+    *Changed 2026-09-24, see #67:* torch colour graded from TORCH_FAR
+    (1,0.46,0.16) to TORCH_NEAR (1,0.66,0.36) (TORCH_COLOR (1,0.56,0.26) on
+    forward/water paths), curve 1.8b^5 + 0.30b^2.5 + 0.02b.
 22. **Tonemap maps midtones 1:1** and only rolls off above 0.55, applied to
     the brightest channel so saturation is preserved; hot highlights drift
     toward white. Saturation option defaults to 105%.
+    *Changed 2026-09-24, see #67:* FILMIC_CURVE (default on) adds a toe (t =
+    0.04 x FILMIC_CONTRAST, a = 0.2) and a shoulder at 0.50, pivot 0.18 (0.18
+    in = 0.18 out). Off gives exactly this old curve.
 
 ## Clouds
 
@@ -115,11 +137,16 @@ are preserved in git history, commit d1cb592.)
     colour. Two taps toward the sun darken faces shadowed by other clouds.
     Crossing into a neighbouring cloud cell keeps the entry face, so no grid
     lines appear inside a cloud (found and fixed with the preview renderer).
+    *Changed 2026-09-24, see #67:* clouds are lit by the sun first (0.22
+    unshadowed scattered sun on every face), sky ambient 0.8x + 0.15 zenith,
+    sunset glow x(1 + 1.2 sunsetF).
 26. **Soft edges come from optical depth**: a ray clipping a corner passes a
     short distance through the cloud and is partly transparent (density 2.2
     per block). Clearly blocky, slightly soft.
 27. **Distance**: clouds blend toward the sky colour behind them
     (exp(-d/900)) and thin out between 1100 and 2400 blocks — no hard edge.
+    *Changed 2026-09-24, see #67:* haze 0.60 x (1 - exp(-d/1400)), thinning
+    800-2000 blocks.
 28. **Drift speed 0.853 blocks/s** (vanilla ~0.6). Chosen so 3600 s of
     `frameTimeCounter` (which Iris wraps hourly) moves exactly one texture
     period (3072 blocks) — the wrap is invisible.
@@ -171,6 +198,9 @@ are preserved in git history, commit d1cb592.)
 41. **Low-light desaturation** in the tonemap (below ~0.06 luminance colour
     fades 45% toward a slightly blue grey): nights and dark caves read as
     night rather than dim daylight; lit areas are untouched.
+    *Changed 2026-09-24, see #67:* gated by night/underground: full strength
+    at night or with little sky light at the eye, 0.2x on the daytime surface,
+    so dark materials in daylight shade keep their colour.
 
 ## Water
 
@@ -190,12 +220,16 @@ are preserved in git history, commit d1cb592.)
 45. **Absorption from the biome tint** (per block, red absorbed first) over the
     real path length behind the surface: shallow water is clear (clean
     shoreline, no foam — not in spec), deep water takes the biome colour.
+    *Changed 2026-09-24, see #67:* absorption (1-t) x 0.50 + (0.06,0.04,0.02)
+    (clearer shallows, bluer deep water).
 46. **Refraction offset shrinks with shallow depth and distance** and is only
     accepted if the bent sample is also behind the surface (no halos of land
     pulled into the water).
 47. **Waves are normal-only** (three octaves of moving value noise, fading out
     by 90 blocks so far water doesn't sparkle). No vertex displacement: it
     opens seams at shorelines and against blocks.
+    *Changed 2026-09-24, see #67:* wave amplitude 0.30 (was 0.45), scatter
+    x0.60 (was 0.42), offsets the darker fill.
 48. **Sun glint**: GGX (roughness 0.2) on the wave normal, shadowed by the
     shadow map and cloud shadows.
 49. **Underwater**: fog uses vanilla's `fogColor` (biome water fog colour while
@@ -214,6 +248,10 @@ are preserved in git history, commit d1cb592.)
     distant terrain melts into the horizon (and into the sunset glow toward
     the sun). The border fade (72-98% of render distance) is kept even with
     Distance Fog off, because a visible world edge is never wanted.
+    *Changed 2026-09-24, see #67:* od = (mix(0.0002,0.0048,rain) + 0.003 storm
+    + 3.6e-6 d) x d x height term; colour capped at 0.20 lum(direct) + 0.55
+    lum(ambient); border 84-99% of render distance; haze and border applied as
+    two mixes, not max().
 52. **Caves stay clean**: haze fades out with the eye's sky light, so
     underground there is no bright sky-coloured fog. Lava, powder snow,
     blindness and darkness get their own fogs.
@@ -226,6 +264,9 @@ are preserved in git history, commit d1cb592.)
     of colortex4); Henyey-Greenstein phase (g=0.72) and colour are applied at
     full resolution in composite1. Strength 0.10 x option — "subtle". Off
     underground and much weaker in rain.
+    *Changed 2026-09-24, see #67:* march 48 blocks, visibility squared, no
+    +0.03 isotropic term, strength 0.08, low-sun factor mix(0.6, 1,
+    smoothstep(0, 0.3, light elevation)).
 55. **Wet look**: in rainy biomes (`biome_precipitation == 1`, so no wet
     deserts or snow), sky-exposed surfaces — mostly tops — darken (albedo
     squared toward itself) and gain smoothness 0.85, which the generated
@@ -246,10 +287,17 @@ are preserved in git history, commit d1cb592.)
     knee (l/(l+0.9)) means midtones barely bloom and the image stays clean;
     the sun, lava, glowstone and bright sky glow. Always "half res" or lower
     by construction, so REGULAR's "bloom at half res" is met in every profile.
+    *Changed 2026-09-24, see #67:* threshold 1.0 with soft knee 0.5 (only real
+    highlights bloom), flat level weights 0.2, strength 0.20 x BLOOM_STRENGTH,
+    mip levels offset by log2(viewHeight/1080) so the glow size does not
+    depend on resolution.
 58. **Sharpening**: 5-tap unsharp mask in final, clamped to the neighbours'
     range (no halos), strength 0.6 x SHARPEN_AMOUNT.
 59. **No vignette, no chromatic aberration, no film grain, no lens flare** —
     not in the spec and they work against "clean". Vanilla vignette is off.
+    *Changed 2026-09-24, see #67:* vignette and split toning are now IN (owner
+    asked for cinematic), each with its own toggle and strength; still no
+    chromatic aberration, film grain or lens flare.
 
 ## Generated PBR
 
@@ -306,3 +354,74 @@ are preserved in git history, commit d1cb592.)
     `gbuffers_line`; without it, outlines use `gbuffers_basic` via the normal
     path, which also widens lines correctly. This check is now stage 3 of
     check.sh.
+
+## Clear cinematic pass (owner feedback 2026-09-24)
+
+67. **2026-09-24, Chris: "too hazy, make it more cinematic, the lighting
+    looks bad". Look v2 "clear and cinematic".** Diagnosis: the three
+    complaints had one cause, nothing in the frame was allowed to be dark or
+    distant. (a) Clear-weather fog was linear from 0 m (4.9/9.6/18.2% at
+    32/64/128 blocks) toward a horizon colour 3-30x brighter than terrain;
+    (b) the sky fill was 42% of the sun, so shade was pale (3.1:1); (c) the
+    tone curve was the identity below 0.55, so blacks sat on a raised floor;
+    plus godrays with a +0.03 isotropic glow over 160 blocks, a bloom knee
+    that let 40% of the sky and 18% of terrain bloom, a near-white horizon
+    band and a pow5 sun halo that whitened 60 degrees of sky. Changes (all
+    constants in the entries marked "see #67"):
+    - **Clear air** (#51, #54, #13/#14, #25/#27, #45/#47): quadratic
+      clear-air haze (1.0/2.7/8.0% at 32/64/128) with a luminance-capped
+      colour, so far hills become blue silhouettes a little darker than the
+      sky; narrow border fade; godrays are near shafts only; deeper sky with
+      a narrow horizon band and tight halo; clouds lit by the sun (white, not
+      lavender); clear blue water.
+    - **Motivated lighting** (#20, #21, #11): warm strong key, cooler darker
+      fill (5:1), golden hour directional to the horizon, sun and moon both 0
+      at the horizon (no pop); stronger face shading (0.70/0.40) with warm
+      ground bounce (BOUNCE_LIGHT) so shaded sides are not muddy blue;
+      vanilla-strength AO in shade (AO_STRENGTH); torch pools with a hot core
+      and amber edge.
+    - **Cinematic grade** (#22, #41, #57, #59, #68): hue-preserving toe +
+      shoulder (FILMIC_CURVE, FILMIC_CONTRAST), split toning gated by hue so
+      the blue sky and warm lights are never tinted (SPLIT_TONING,
+      SPLIT_TONE_STRENGTH), subtle vignette (VIGNETTE, VIGNETTE_STRENGTH:
+      -25% linear in the corners at 100%), thresholded bloom, optional
+      darken-only local contrast (LOCAL_CONTRAST, off: it forces the mip
+      chain), TAA history with a 5-tap Catmull-Rom fetch (keeps 73% of 4 px
+      detail in motion instead of 47%).
+    - All new options are taste options in no profile (#63), under O >
+      Colour Grading and O > Lighting & Shadows. No new passes, buffers or
+      uniforms; loop bounds unchanged.
+    - Not adopted from the audits: fill 0.37 / sunset fill 0.20 and faces
+      0.64 + 0.36 n.y (muddy golden hour and near-black shaded dirt steps
+      together with the toe); desaturation range 0.002-0.035 (replaced by the
+      day/night gate); DAY_HORIZON (0.42,0.62,1.00) and a pow8*0.05 halo (the
+      deeper palette was used); cloud thinning 1100-2400 (800-2000 cleans the
+      horizon band).
+    - Preview, INSANE, before -> after (AO-enabled preview for both): noon
+      terrain saturation 0.53/0.49 -> 0.61/0.58, noon p5 luma 0.23 -> 0.11,
+      noon p90/p10 2.3 -> 4.5, sunset p90/p10 1.4-1.6 -> 2.1-2.5, rain
+      saturation 0.37/0.31 -> 0.46/0.41, noon sky saturation 0.35 -> 0.40-0.42,
+      far lake water hue 200 -> 207 degrees, godray on/off difference at noon
+      0.56 -> 0.30 levels, noon mean -7%/-12%, night mean unchanged
+      (+1%/-5%), sunlit grass unchanged (within 2% with the vignette off).
+      Sunset/rain frames are darker (0.24 -> 0.16-0.18, 0.33 -> 0.23-0.25):
+      that is the old fog wash going away. First knobs if Chris finds them
+      too dark: FILMIC_GOLDEN_GAIN 1.25 -> 1.35, ambSunset 0.30 -> 0.36, rain
+      weatherDirect 0.075 -> 0.10.
+    - Blind spots of the 80x80-block preview, to confirm in game: fog past
+      ~57 blocks and the border fade (checked numerically), caves (1.5x gain
+      and the desaturation gate), underwater (fog light ~26% darker with the
+      new fill), Nether/End (x1.25). Overrides the old "Not filmic" spec
+      line.
+68. **Fixed time-of-day exposure for the cinematic toe.** The toe darkens dim
+    scenes most, so final.fsh multiplies by 1.5 at night or underground
+    (FILMIC_NIGHT_GAIN; 1.25 with FULLBRIGHT, whose toe is halved) and by
+    1.25 at golden hour, sun elevation 0-0.30 (FILMIC_GOLDEN_GAIN).
+    dim_final uses 1.25 when FILMIC_CURVE is on. Tested in the design pass: night gain
+    1.3/1.5/1.7: night mean 0.142/0.155/0.167 (old 0.156). Golden gain 1.25
+    moves the sunset mean from 0.159 to 0.181. It is a uniform-driven curve
+    (sunAngle, eyeBrightnessSmooth), not a histogram: no extra pass.
+    Underground counts as night, so a torch-lit cave looks the same at noon
+    and midnight; entering a cave ramps up over eyeBrightnessSmooth's lag,
+    which reads like eye adaptation. Lower FILMIC_NIGHT_GAIN to 1.3 if caves
+    look too bright.

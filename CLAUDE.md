@@ -107,13 +107,29 @@ not show Iris INFO lines such as "Using shaderpack".
 
 ## The look (target spec)
 
-- Mood: Complementary Reimagined. Bright, saturated, clean, vanilla-faithful.
-  Not filmic, desaturated or gritty.
-- Lighting quality: Bliss/Photon level. Soft filtered shadows, no acne, no
-  light leaking, sky-tinted ambient, coloured block light (warm torch/lava,
-  cool soul fire).
-- Sky: minimal and clean. Smooth gradient, crisp sun and moon, stars at night,
-  clean sunrise/sunset that never goes orange-soup, rain/thunder states.
+- **Direction (Chris, 2026-09-24, first in-game test):** "very hazy", "make it
+  more cinematic", "the lighting doesn't look good". Target: **clear and
+  cinematic**. This replaces the old "Not filmic" line. Do not undo it in
+  later sessions (DECISIONS #67-68).
+- Mood: Complementary Reimagined's colour. Bright, saturated, clean and
+  vanilla-faithful in the brightness of sunlit surfaces, with cinematic
+  contrast: deep, clean blacks that are never crushed, soft highlight
+  roll-off, warm key / cool shade, a gentle vignette. Never milky, grey,
+  gritty, muddy or desaturated.
+- Clarity: no veil. In clear weather the first ~100 blocks are crisp (haze
+  <= 3% at 64 blocks), and only far land gains blue depth, a little darker
+  than the sky behind it. Haze is never brighter than the light could
+  scatter. Rain and thunder stay clearly foggy.
+- Lighting quality: Bliss/Photon level. A strong warm sun key (about 5600 K
+  at noon, about 3400 K at the horizon) against a cooler, clearly darker sky
+  fill (about 5:1 sunlit to shaded tops at noon). Golden hour stays
+  directional down to the horizon, with no pop at the sun/moon switch. Soft
+  filtered shadows, no acne, no light leaking, vanilla-strength corner AO in
+  shade, warm ground bounce, coloured block light (hot core, amber falloff;
+  warm torch/lava, cool soul fire).
+- Sky: deep clean blue with a narrow horizon band, crisp sun and moon with a
+  tight halo, stars at night. Colourful sunrise and sunset (orange toward the
+  sun, lilac away), never orange soup. Rain and thunder states.
 - Clouds: match Complementary Reimagined's default style as closely as possible,
   from scratch: vanilla cloud shapes extruded into thick solid blocky volumes
   with visible sides and undersides. Lit like solid objects: bright sunlit tops,
@@ -121,12 +137,20 @@ not show Iris INFO lines such as "Using shaderpack".
   side / cool shaded side at sunset, dim bluish moonlit at night. Slightly soft
   edges but clearly blocky — not fluffy photoreal cumulus, not a flat texture.
   Vanilla height, slow drift, soft ground shadows in REGULAR/INSANE, fade into
-  distance fog with no hard edge. Must be cheap.
-- Water: reflections (including clouds), refraction, gentle waves, tinted
-  underwater fog, clean shoreline.
-- Atmosphere: distance fog matched to sky colour, subtle godrays, rain fog and
-  wet look.
-- Post: saturation-preserving tonemap, bloom, TAA, light sharpening.
+  distance fog with no hard edge. Must be cheap. Lit by the sun first, with
+  near-white tops, cool grey-blue shade and a peach glow at sunset.
+- Water: clear and blue, not teal. Reflections (including clouds),
+  refraction, calm gentle waves, tinted underwater fog, clean shoreline.
+- Atmosphere: distance fog as above. Godrays are shafts only where something
+  casts a shadow (near 48 blocks), never an open-air glow. Rain fog and wet
+  look.
+- Post: a hue-preserving cinematic tonemap (toe + soft shoulder, pivot 0.18)
+  with a fixed time-of-day exposure (night/underground x1.5, golden hour
+  x1.25). Split toning (warm lit / cool shade, never the sky or torches), a
+  subtle vignette, thresholded bloom (only real highlights glow), TAA with
+  Catmull-Rom history, light sharpening. Optional darken-only local contrast
+  (off by default). Every grading feature has its own toggle under Colour
+  Grading.
 
 ## Profiles
 
@@ -185,8 +209,8 @@ Pass order (Overworld) and when each runs:
   always) → gbuffers translucent (water data or POTATO forward water, glass,
   particles, weather) → `composite` (SSR + godray march, scaled; WATER_REFLECTIONS
   or GODRAYS) → `composite1` (water shading, underwater fog, godray add;
-  water features or GODRAYS) → `composite2` (TAA) → `final` (sharpen, bloom,
-  tonemap).
+  water features or GODRAYS) → `composite2` (TAA) → `final` (sharpen, local
+  contrast, bloom, vignette, time-of-day exposure, tonemap + grade).
 - Switched off with `program.<name>.enabled` blocks in shaders.properties.
 - Nether/End: `shaders/nether/`, `shaders/end/` (dimension.properties), a
   forward pipeline using the vanilla lightmap (`program/dim_*`).
@@ -194,7 +218,9 @@ Pass order (Overworld) and when each runs:
 Offline tools: `tools/preview.py sky|clouds|clouds_above|clouds_flat|world|hut|lake|pbr`
 renders the pack's lib code on the Apple GPU to `previews/*.png` (a contact
 sheet you can open with the Read tool) — use it to judge looks before asking
-Chris to test. `tools/pair_screenshots.py` labels the TESTING.md comparison
+Chris to test. world/hut/lake show vanilla-style corner AO.
+`previews/baseline_*.png` are the pre-2026-09-24 look; keep them, but they no
+longer match. `tools/pair_screenshots.py` labels the TESTING.md comparison
 screenshots.
 
 Source layout: `shaders/lib/` shared code, `shaders/program/` program bodies
