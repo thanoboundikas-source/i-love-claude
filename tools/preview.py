@@ -15,11 +15,13 @@ world / hut / lake use the game's HDR chain (two passes):
   1. the scene shader writes linear HDR colour (fog and godrays included,
      no tonemap) into a float texture in colortex2's format from
      lib/buffers.glsl, which is then mipmapped like Iris does;
-  2. the pack's REAL final.fsh (sharpen + bloom + tonemap + dither) runs on it.
+  2. the pack's REAL final.fsh (sharpen + bloom + tonemap + dither) runs on it,
+     with a depthtex0 stand-in (1 = sky) for its split-toning sky mask.
   Godrays: the same march as composite's godrayAmount() (GODRAY_SAMPLES
   points to min(distance, 48), ign jitter) with the voxel tracer standing in
-  for shadowtex1, then godrayLight() from lib/godrays.glsl, exactly where
-  composite1 adds it. Each tile is rendered at the game's framebuffer size
+  for shadowtex1, composite1's shaft step (godrayShafts over 4 neighbours
+  across the shafts; here each neighbour is its own ray), then godrayLight()
+  from lib/godrays.glsl, exactly where composite1 adds it. Each tile is rendered at the game's framebuffer size
   (--ss 4: 1920x1080, Chris' F2 screenshots) and box-averaged down to
   480x270, because bloom radius is in pixels: a 480x270 render would show
   bloom 4x too wide. The average also stands in for TAA converging the
@@ -397,9 +399,13 @@ SKY_BODY = r'''#version 330 compatibility
 #include "/lib/sky.glsl"
 #include "/lib/tonemap.glsl"
 #include "/lib/clouds.glsl"
-PREVIEW_EXTRA
 in vec2 texcoord;
+PREVIEW_EXTRA
+#ifndef PREVIEW_DEPTH
+#define PREVIEW_DEPTH 1.0
+#endif
 layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 outDepth;
 void main() {
     initSky();
     vec3 viewPos = screenToView(texcoord, 1.0);
@@ -410,14 +416,15 @@ void main() {
 '''
 
 # Single pass (legacy / non-HDR scenes): tonemap in the scene shader.
-LDR_OUTPUT = """c = tonemapSolstice(c, nightF);
+LDR_OUTPUT = """c = tonemapSolstice(c, nightF, PREVIEW_DEPTH < 1.0 ? 1.0 : 0.0);
     outColor = vec4(linearToSrgb(c), 1.0);"""
-# HDR chain: linear scene colour for final.fsh (colortex2 in the game).
-HDR_OUTPUT = "outColor = vec4(c, 1.0);"
+# HDR chain: linear scene colour for final.fsh (colortex2 in the game), plus
+# a depthtex0 stand-in (1 = sky, 0.5 = geometry) for final's sky mask.
+HDR_OUTPUT = "outColor = vec4(c, 1.0); outDepth = vec4(PREVIEW_DEPTH);"
 # World scenes in the HDR chain: godrays added to the fogged scene, as
 # composite1 (program/composite_water.fsh) does, before final.
 GODRAY_ADD = """#ifdef GODRAYS_ACTIVE
-    c += godrayLight(previewGodrayAmount(dir, previewHitDist, ignAnimated(gl_FragCoord.xy, frameCounter)), dir);
+    c += godrayLight(previewGodrayShafts(dir, previewHitDist), dir);
     #endif
     """
 
@@ -534,6 +541,7 @@ bool traceVoxels(vec3 ro, vec3 rd, int steps, out ivec3 hitB, out vec3 hitN, out
 // Distance to the first surface along the primary view ray (depthtex0 in
 // the game, so the water surface for water): the godray march length.
 float previewHitDist = 1e4;
+#define PREVIEW_DEPTH (previewHitDist < 1e3 ? 0.5 : 1.0)
 
 float aoOcc(ivec3 c) { return blockAt(c) != 0 ? 0.2 : 1.0; }
 // Vanilla-style smooth-lighting AO (4 samples per vertex, bilinear across the face).
@@ -564,10 +572,13 @@ vec3 previewWorld(vec3 dir) {
     return c;
 }
 
+const float WATER_Y = 63.9;
+bool isLake(vec3 p) { return length(p.xz - vec2(-17.5, 16.5)) < 15.5; }
+
 #ifdef GODRAYS_ACTIVE
 // Stand-in for composite's godrayAmount() (lib/godrays.glsl): the same march,
-// shaft weight and falloff, but light visibility at each point comes from the voxel
-// tracer instead of shadowtex1.
+// shaft weight and falloff (the ray's shadow deficit), but light visibility
+// at each point comes from the voxel tracer instead of shadowtex1.
 float previewGodrayAmount(vec3 dir, float hitDist, float jitter) {
     float dist = min(hitDist, 48.0);
     float stepLen = dist / float(GODRAY_SAMPLES);
@@ -578,12 +589,40 @@ float previewGodrayAmount(vec3 dir, float hitDist, float jitter) {
         vis += traceVoxels(p, lightDir, 96, b, n, t) ? 0.0 : 1.0;
     }
     vis /= float(GODRAY_SAMPLES);
-    return godrayShaftWeight(vis) * (1.0 - exp(-dist * 0.012));
+    return (1.0 - godrayShaftWeight(vis)) * (1.0 - exp(-dist * 0.012));
+}
+
+// depthtex0 distance along any view ray (the water surface in the lake scene).
+float previewPrimaryDist(vec3 dir) {
+    ivec3 b; vec3 n; float t;
+    float d = traceVoxels(cameraPosition, dir, 160, b, n, t) ? t : 1e4;
+#ifdef PREVIEW_LAKE
+    if (dir.y < 0.0) {
+        float tw = (WATER_Y - cameraPosition.y) / dir.y;
+        if (tw < d && isLake(cameraPosition + dir * tw)) d = tw;
+    }
+#endif
+    return d;
+}
+
+float previewGodrayTap(vec2 uv, vec2 frag) {
+    vec3 d = normalize(viewDirToWorld(screenToView(clamp(uv, 0.0, 1.0), 1.0)));
+    return previewGodrayAmount(d, previewPrimaryDist(d), ignAnimated(frag, frameCounter));
+}
+
+// composite1's neighbourhood step (program/composite_water.fsh): the same
+// 4 taps across the shafts, each its own ray here.
+float previewGodrayShafts(vec3 dir, float hitDist) {
+    vec2 a = godrayAcross(texcoord);
+    vec2 px = vec2(viewWidth, viewHeight);
+    float c = previewGodrayAmount(dir, hitDist, ignAnimated(gl_FragCoord.xy, frameCounter));
+    return godrayShafts(c,
+        previewGodrayTap(texcoord + a * GODRAY_NEAR, gl_FragCoord.xy + a * GODRAY_NEAR * px),
+        previewGodrayTap(texcoord - a * GODRAY_NEAR, gl_FragCoord.xy - a * GODRAY_NEAR * px),
+        previewGodrayTap(texcoord + a * GODRAY_FAR, gl_FragCoord.xy + a * GODRAY_FAR * px),
+        previewGodrayTap(texcoord - a * GODRAY_FAR, gl_FragCoord.xy - a * GODRAY_FAR * px));
 }
 #endif
-
-const float WATER_Y = 63.9;
-bool isLake(vec3 p) { return length(p.xz - vec2(-17.5, 16.5)) < 15.5; }
 
 vec3 previewLake(vec3 dir) {
     vec3 ro = cameraPosition;
@@ -753,7 +792,7 @@ void main() {
     s.smoothness = generatedSmoothness(alb, contrast, isMetal == 1);
     vec3 c = shadeSurface(s, vec3(1.0), vec3(0.0), 0.0);
     if (s.smoothness > 0.01) c += specularLighting(s, -dir, vec3(1.0));
-    outColor = vec4(linearToSrgb(tonemapSolstice(c, nightF)), 1.0);
+    outColor = vec4(linearToSrgb(tonemapSolstice(c, nightF, 1.0)), 1.0);
 }
 """
 
@@ -826,7 +865,7 @@ if __name__ == "__main__":
     elif scene == "lake":
         extra = WORLD_EXTRA.replace("PREVIEW_FOG_INCLUDE", FOG_INCLUDE).replace("PREVIEW_FOG_APPLY", FOG_APPLY)
         pres = [p for p in PRESETS if p[0] in ("noon", "morning", "sunset", "night", "golden pm")]
-        contact_sheet("previewLake(dir)", CLOUD_EXTRA + extra, "lake", presets=pres,
+        contact_sheet("previewLake(dir)", CLOUD_EXTRA + "#define PREVIEW_LAKE 1\n" + extra, "lake", presets=pres,
                       textures=[("cloudTex", 0)], cam_y=69.0, cam_xz=(-2.0, 2.0), look_at=(-18.0, 62.0, 18.0),
                       hdr=True, godrays=True)
     elif scene == "snow":

@@ -16,7 +16,9 @@
          the way Iris prepares a buffer declared colortexNMipmapEnabled
          (LINEAR_MIPMAP_LINEAR / LINEAR, clamp to edge).
       2. POST (normally the pack's real final.fsh) runs with that texture on
-         its "colortex2" sampler and writes the RGBA8 result.
+         its "colortex2" sampler and writes the RGBA8 result. FRAG's
+         location 1 output (an R8 target, cleared to 1) is bound as
+         "depthtex0": 1 = sky, less = geometry (final's sky mask).
     The uniform file is applied to both programs (names a program does not
     use are ignored); textures are loaded once and stay bound for both.
 
@@ -40,6 +42,7 @@
 #define MAX_LINES 1024
 #define MAX_UNITS 32
 #define HDR_UNIT 15
+#define DEPTH_UNIT 14
 #define BAND_ROWS 128
 
 static char *readFile(const char *path, long *len) {
@@ -116,7 +119,7 @@ static void applyUniforms(GLuint prog) {
         } else if (!strcmp(kind, "t")) {
             int unit, tw, th; char path[2048], filt[32] = "";
             sscanf(rest, "%d %d %d %2047s %31s", &unit, &tw, &th, path, filt);
-            if (unit < 0 || unit >= MAX_UNITS || unit == HDR_UNIT) { fprintf(stderr, "bad texture unit %d for %s\n", unit, name); continue; }
+            if (unit < 0 || unit >= MAX_UNITS || unit == HDR_UNIT || unit == DEPTH_UNIT) { fprintf(stderr, "bad texture unit %d for %s\n", unit, name); continue; }
             if (!texByUnit[unit]) {
                 long n; char *data = readFile(path, &n);
                 if (!data) { fprintf(stderr, "no texture %s\n", path); continue; }
@@ -200,12 +203,30 @@ int main(int argc, char **argv) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glBindTexture(GL_TEXTURE_2D, 0);   // not bound while it is the render target
 
+        // depthtex0 stand-in written by FRAG's location 1 (1 = sky, <1 = geometry).
+        GLuint depth; glGenTextures(1, &depth);
+        glActiveTexture(GL_TEXTURE0 + DEPTH_UNIT);
+        glBindTexture(GL_TEXTURE_2D, depth);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, W, H, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
         GLuint hdrFbo; glGenFramebuffers(1, &hdrFbo); glBindFramebuffer(GL_FRAMEBUFFER, hdrFbo);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, hdr, 0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, depth, 0);
+        GLenum bufs[2] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+        glDrawBuffers(2, bufs);
         checkFbo("HDR");
+        GLfloat one[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        glClearBufferfv(GL_COLOR, 1, one);
         glUseProgram(prog);
         applyUniforms(prog);
         drawBanded(W, H);
+        glActiveTexture(GL_TEXTURE0 + DEPTH_UNIT);
+        glBindTexture(GL_TEXTURE_2D, depth);
 
         // Mip chain for bloom, as Iris does before a program that asks for it.
         glActiveTexture(GL_TEXTURE0 + HDR_UNIT);
@@ -218,6 +239,7 @@ int main(int argc, char **argv) {
         glUseProgram(post);
         applyUniforms(post);
         glUniform1i(glGetUniformLocation(post, "colortex2"), HDR_UNIT);
+        glUniform1i(glGetUniformLocation(post, "depthtex0"), DEPTH_UNIT);
         drawBanded(W, H);
     }
 

@@ -110,7 +110,7 @@ not show Iris INFO lines such as "Using shaderpack".
 - **Direction (Chris, 2026-09-24, first in-game test):** "very hazy", "make it
   more cinematic", "the lighting doesn't look good". Target: **clear and
   cinematic**. This replaces the old "Not filmic" line. Do not undo it in
-  later sessions (DECISIONS #67-76).
+  later sessions (DECISIONS #67-82).
 - Mood: Complementary Reimagined's colour. Bright, saturated, clean and
   vanilla-faithful in the brightness of sunlit surfaces, with cinematic
   contrast: deep, clean blacks that are never crushed, soft highlight
@@ -123,9 +123,12 @@ not show Iris INFO lines such as "Using shaderpack".
 - Lighting quality: Bliss/Photon level. A strong warm sun key (about 5600 K
   at noon, about 3400 K at the horizon) against a cooler, clearly darker sky
   fill (about 5:1 sunlit to shaded tops at noon). Golden hour stays
-  directional down to the horizon and warm (peach sky fill, ground about as
-  bright as the pre-v2 look but clear), with no pop at the sun/moon switch.
-  Night shade is dark but never pure black. Soft filtered shadows, no acne,
+  directional down to the horizon and warm: the low sun's key is lifted on
+  flat ground (sunlit grass golden, sunlit snow peach) while shade stays
+  fill-lit and cool; peach-tinged sky fill, ground about as bright as the
+  pre-v2 look but clear, no pop at the sun/moon switch. Night shade is dark
+  but never pure black, and moonlit ground reads cool blue-green, not
+  olive (block light keeps its colour). Soft filtered shadows, no acne,
   no light leaking, vanilla-strength corner AO in shade, warm ground
   bounce, coloured block light (hot core, amber falloff, levels 2-6 still
   readable in caves; warm torch/lava, cool soul fire).
@@ -145,13 +148,16 @@ not show Iris INFO lines such as "Using shaderpack".
   refraction, calm gentle waves, tinted underwater fog, clean shoreline.
 - Atmosphere: distance fog as above; rain fog converges on the sky colour
   (no bright band at the world edge). Godrays are shafts only where
-  something casts a shadow (near 48 blocks), never an open-air glow. Rain
+  something casts a shadow (near 48 blocks): lit air next to shadowed air,
+  found in screen space across the shafts. Never an open-air glow, and a
+  shadowed area never glows more than the lit air beside it. Rain
   fog and wet look.
 - Post: a hue-preserving cinematic tonemap (toe + soft shoulder, pivot 0.18;
-  a gentler toe at night / underground) with a fixed time-of-day exposure
-  (night/underground x1.35, golden hour x1.40). Split toning on the daytime
-  surface only (warm lit / cool shade, never the sky, night or torch-lit
-  caves), a subtle vignette, thresholded bloom (only real highlights glow:
+  a gentler toe and a moonlit low-light tint at night / underground) with a
+  fixed time-of-day exposure (night/underground x1.35; golden hour x1.12,
+  rising to x1.40 at the horizon as the sun's key fades). Split toning on
+  the daytime surface only (warm lit / cool shade, never the sky, which is
+  masked by depth, never night or torch-lit caves), a subtle vignette, thresholded bloom (only real highlights glow:
   nothing below HDR 1.5, so snow and sand never veil), TAA with Catmull-Rom
   history clamped against ringing, light sharpening. Optional darken-only
   local contrast (off by default). Every grading feature has its own toggle
@@ -201,7 +207,8 @@ Buffers (all sizes relative to the window):
   (mipmapped in final for bloom).
 - `colortex3` RGBA16F, size = RENDER_SCALE — clouds (premultiplied rgb, alpha).
 - `colortex4` RGBA16F, size = RENDER_SCALE × (HALF_RES_FX ? 0.5 : 1) — water
-  reflection (rgb) + godray amount (a).
+  reflection (rgb) + godray shadow deficit (a; composite1 turns it into
+  shafts).
 - `colortex5` RGBA16F, never cleared — TAA history.
 - `colortex6` RGBA8 — emissive colour for the coloured block-light tint
   (mipmapped before deferred1).
@@ -213,9 +220,10 @@ Pass order (Overworld) and when each runs:
   `deferred1` (lighting, sky, clouds composite, fog, POTATO underwater fog;
   always) → gbuffers translucent (water data or POTATO forward water, glass,
   particles, weather) → `composite` (SSR + godray march, scaled; WATER_REFLECTIONS
-  or GODRAYS) → `composite1` (water shading, underwater fog, godray add;
-  water features or GODRAYS) → `composite2` (TAA) → `final` (sharpen, local
-  contrast, bloom, vignette, time-of-day exposure, tonemap + grade).
+  or GODRAYS) → `composite1` (water shading, underwater fog, godray shafts
+  from 4 neighbour taps; water features or GODRAYS) → `composite2` (TAA) →
+  `final` (sharpen, local contrast, bloom, vignette, time-of-day exposure,
+  tonemap + grade; reads depthtex0 for the split-toning sky mask).
 - Switched off with `program.<name>.enabled` blocks in shaders.properties.
 - Nether/End: `shaders/nether/`, `shaders/end/` (dimension.properties), a
   forward pipeline using the vanilla lightmap (`program/dim_*`).
@@ -225,7 +233,9 @@ renders the pack's lib code on the Apple GPU to `previews/*.png` (a contact
 sheet you can open with the Read tool) — use it to judge looks before asking
 Chris to test. world/hut/lake show vanilla-style corner AO; their last rows
 are real golden hour (sun ~6 degrees; "sunrise"/"sunset" are only 1.6).
-`snow` is the bloom test (snow-white ground must not bloom).
+`snow` is the bloom test (snow-white ground must not bloom). The HDR chain
+gives final.fsh a depthtex0 stand-in (sky mask) and mirrors composite1's
+godray shaft step.
 `previews/baseline_*.png` are the pre-2026-09-24 look; keep them, but they no
 longer match. `tools/pair_screenshots.py` labels the TESTING.md comparison
 screenshots.

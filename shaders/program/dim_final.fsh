@@ -26,6 +26,6 @@ void main() {
         // 0.03-0.1 range within about +-10% of the old identity curve.
         lin *= 1.15;
     #endif
-    vec3 c = linearToSrgb(tonemapSolstice(lin, 1.0));
+    vec3 c = linearToSrgb(tonemapSolstice(lin, 1.0, 1.0));
     outColor = vec4(saturate(c + ditherRGB8(gl_FragCoord.xy)), 1.0);
 }

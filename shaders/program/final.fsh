@@ -20,9 +20,13 @@
 
 // Brightness given back by FILMIC_CURVE at night / golden hour (see below).
 const float FILMIC_NIGHT_GAIN = 1.35;
-const float FILMIC_GOLDEN_GAIN = 1.40;
+const float FILMIC_GOLDEN_GAIN = 1.12;    // sun above ~3 degrees (the key lift carries it)
+const float FILMIC_HORIZON_GAIN = 1.40;   // sun at the horizon, where the key has faded out
 
 uniform sampler2D colortex2;
+#ifdef SPLIT_TONING
+    uniform sampler2D depthtex0;
+#endif
 #if defined BLOOM || defined LOCAL_CONTRAST
     const bool colortex2MipmapEnabled = true;
 #endif
@@ -114,18 +118,26 @@ void main() {
         // time-of-day exposure, not eye adaptation).
         // Underground counts as night, so a torch-lit cave looks the same at
         // noon and at midnight. FULLBRIGHT halves the toe, so half the gain.
-        // Golden hour (sun height 0-0.40) is where a flat top gets almost no
-        // sun; x1.40 there keeps the ground at its old brightness, and the
-        // gain blends into the night gain through twilight with no dip.
+        // Golden hour (sun height 0-0.40): the low-sun key lift in
+        // lighting.glsl lights the ground, so only a small gain is needed
+        // (x1.12). Within ~2 degrees of the horizon the key fades out
+        // (sky.glsl, sun height 0-0.05), so the gain rises to x1.40 as it
+        // goes and blends into the night gain through twilight with no dip.
         float lowGain = FILMIC_NIGHT_GAIN;
         #ifdef FULLBRIGHT
             lowGain = 1.0 + (FILMIC_NIGHT_GAIN - 1.0) * 0.5;
         #endif
         float goldenGate = (1.0 - smoothstep(0.0, 0.40, sunH)) * (1.0 - lowLightGate);
-        hdr *= mix(1.0, lowGain, lowLightGate) * mix(1.0, FILMIC_GOLDEN_GAIN, goldenGate);
+        float goldenGain = mix(FILMIC_HORIZON_GAIN, FILMIC_GOLDEN_GAIN, smoothstep(0.02, 0.055, sunH));
+        hdr *= mix(1.0, lowGain, lowLightGate) * mix(1.0, goldenGain, goldenGate);
     #endif
 
-    vec3 col = tonemapSolstice(hdr, lowLightGate);
+    // Split toning never touches the sky, sun, moon or clouds (depth 1).
+    float surface = 1.0;
+    #ifdef SPLIT_TONING
+        surface = texelFetch(depthtex0, px, 0).r < 1.0 ? 1.0 : 0.0;
+    #endif
+    vec3 col = tonemapSolstice(hdr, lowLightGate, surface);
     col = linearToSrgb(col) + ditherRGB8(gl_FragCoord.xy);
     outColor = vec4(saturate(col), 1.0);
 }

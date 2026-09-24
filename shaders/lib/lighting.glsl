@@ -4,7 +4,8 @@
     Units: linear HDR, 1.0 = white surface lit by the noon sun head-on.
     Light terms:
       direct  - sun/moon * N.L * shadow (shadow map when SHADOWS is on,
-                sky-light proxy otherwise)
+                sky-light proxy otherwise); N.L lifted at a low sun
+                (GOLDEN_LIFT)
       ambient - sky light, vanilla-like directional falloff, AO
       block   - torch light from the lightmap, tinted by COLORED_LIGHT
       floor   - tiny minimum so caves are not pure black (FULLBRIGHT lifts it)
@@ -80,11 +81,23 @@ vec3 blockLightColor(vec3 tint, float tintWeight, float b) {
     return c;
 }
 
+// Golden-hour key lift: with the sun a few degrees up, a flat top gets
+// N.L = sin(elevation) (~0.1) and was lit almost only by the cool sky fill,
+// so golden-hour ground kept its noon colour and looked flat. The bright
+// sky around a low sun lights the ground from nearly the sun's direction,
+// so at a low sun the key's N.L is lifted with a power curve: tops get
+// ~0.44 of the key at 6 degrees, sun-facing sides are unchanged, and it is
+// still 0 at N.L = 0 (the shadow map path drops N.L <= 0 faces anyway) and
+// still multiplied by the sun's shadow, so shade stays fill-only and cool.
+// Fades out by sun height ~0.45 and below the horizon (the moon never lifts).
+const float GOLDEN_LIFT = 0.73;
+
 // Assemble the lighting. `shadow` is the direct-light visibility (rgb so
 // stained glass can tint it), already including the leak guard.
 vec3 shadeSurface(Surface s, vec3 shadow, vec3 blockTint, float blockTintWeight) {
     float NdotL = dot(s.normal, lightDir);
-    float diffuse = max(NdotL, 0.0);
+    float lift = GOLDEN_LIFT * sunsetF * smoothstep(0.0, 0.01, sunElev);
+    float diffuse = pow(saturate(NdotL), 1.0 - lift);
 
     #ifdef FOLIAGE_SSS
         if ((s.flags & FLAG_SSS) != 0) {

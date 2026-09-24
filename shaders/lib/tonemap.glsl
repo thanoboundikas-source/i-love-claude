@@ -7,13 +7,16 @@
     at 0.18 so midtone brightness stays vanilla. Very hot highlights (sun,
     lava cores) drift toward white. SPLIT_TONING warms bright warm-coloured
     surfaces and cools neutral shadows on the daytime surface only (never
-    the blue sky, never caves or night, so torch light is left alone).
+    the sky, never caves or night, so torch light is left alone).
 
     lowLightGate: 1 = night / underground (full low-light desaturation),
     0 = daytime surface (almost none).
 */
 
 const float TM_PIVOT = 0.18;
+// Night / underground low-light tint for non-warm pixels (luminance 0.95:
+// at 1.0 the bluer night measured 1% brighter in sRGB than before).
+const vec3 MOONLIT_TINT = vec3(0.76, 0.95, 1.48);
 
 float shoulderCurve(float x, float start) {
     if (x <= start) return x;
@@ -36,10 +39,12 @@ float toeCurve(float x, float gate) {
 }
 
 // Daytime surface only (gate = night / underground): torch- and lava-lit
-// caves and the night sky are left alone. Already-blue pixels (the sky at
-// any time of day) are never cooled further.
-vec3 splitTone(vec3 c, float gate) {
-    float st = float(SPLIT_TONE_STRENGTH) * 0.01 * (1.0 - gate);
+// caves and the night sky are left alone. surface = 0 for the sky, the
+// sun, the moon and clouds (depth 1 in final), so the sunset band and the
+// sun halo are never warmed or cooled. Already-blue surface pixels are
+// never cooled further.
+vec3 splitTone(vec3 c, float gate, float surface) {
+    float st = float(SPLIT_TONE_STRENGTH) * 0.01 * (1.0 - gate) * surface;
     float L = luminance(c);
     float warmth = saturate((c.r - c.b) / max(c.r, 1e-4));
     float blueness = saturate((c.b - c.r) / max(c.b, 1e-4));
@@ -50,16 +55,28 @@ vec3 splitTone(vec3 c, float gate) {
     return c;
 }
 
-vec3 tonemapSolstice(vec3 hdr, float lowLightGate) {
+// surface: 1 = world geometry, 0 = sky (only split toning uses it).
+vec3 tonemapSolstice(vec3 hdr, float lowLightGate, float surface) {
     hdr = max(hdr, vec3(0.0)) * (float(EXPOSURE) * 0.01);
 
+    // Low-light shift (the eye loses colour in the dark): dim pixels move
+    // toward a cool tint. By day (gate 0) it is gentle and unchanged. At
+    // night and underground, non-warm pixels move further toward a moonlit
+    // blue, so moonlit grass reads blue-green instead of olive. Warm pixels
+    // (torch, lava and fire light: red above green, or yellow as on
+    // torch-lit grass) keep the old gentle shift, so block light and its
+    // amber falloff at levels 2-6 look as before.
     float lum = luminance(hdr);
     float dim = 1.0 - smoothstep(0.004, 0.06, lum);
     #ifdef FULLBRIGHT
         dim *= 0.25;
     #endif
     dim *= mix(0.2, 1.0, lowLightGate);
-    hdr = mix(hdr, vec3(lum) * vec3(0.86, 0.95, 1.12), dim * 0.45);
+    float warmPx = saturate(max(3.0 * (hdr.r - hdr.g) / max(hdr.r, 1e-5),
+        4.0 * (min(hdr.r, hdr.g) - hdr.b) / max(max(hdr.r, hdr.g), 1e-5) - 0.6));
+    float moonlit = lowLightGate * (1.0 - warmPx);
+    vec3 lowTint = mix(vec3(0.86, 0.95, 1.12), MOONLIT_TINT, moonlit);
+    hdr = mix(hdr, vec3(lum) * lowTint, dim * mix(0.45, 0.60, moonlit));
 
     float peak = max(max(hdr.r, hdr.g), hdr.b);
     if (peak <= 1e-6) return vec3(0.0);
@@ -72,7 +89,7 @@ vec3 tonemapSolstice(vec3 hdr, float lowLightGate) {
     float whiteOut = smoothstep(1.2, 8.0, peak) * 0.65;
     c = mix(c, vec3(mapped), whiteOut);
     #ifdef SPLIT_TONING
-        c = splitTone(c, lowLightGate);
+        c = splitTone(c, lowLightGate, surface);
     #endif
     return adjustSaturation(c, float(SATURATION) * 0.01);
 }

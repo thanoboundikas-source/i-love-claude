@@ -82,7 +82,7 @@ void initSky() {
 
     // Direct light. The sun warms as it sinks and fades out just below the
     // horizon; the moon takes over at night.
-    vec3 sunTint = mix(SUNLIGHT_NOON, SUNLIGHT_GOLDEN, 1.0 - smoothstep(0.0, 0.45, sunElev));
+    vec3 sunTint = mix(SUNLIGHT_NOON, SUNLIGHT_GOLDEN, 1.0 - smoothstep(0.0, 0.55, sunElev));
     float sunI = 1.42 * smoothstep(0.0, 0.05, sunElev);
     float moonI = 0.125 * moonPhaseBrightness() * smoothstep(0.0, 0.10, moonDir.y);
     float weatherDirect = mix(1.0, 0.075, rainF) * mix(1.0, 0.5, stormF);

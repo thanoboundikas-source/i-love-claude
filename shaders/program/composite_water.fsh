@@ -123,8 +123,17 @@ void main() {
 
     #ifdef GODRAYS_ACTIVE
         if (isEyeInWater == 0) {
+            // Shafts only where lit air sits next to shadowed air: the
+            // centre's shadow deficit against the largest of 4 neighbours
+            // across the shafts (low-res taps, no extra pass).
+            vec2 a = godrayAcross(texcoord);
+            float shafts = godrayShafts(texture(colortex4, texcoord).a,
+                texture(colortex4, texcoord + a * GODRAY_NEAR).a,
+                texture(colortex4, texcoord - a * GODRAY_NEAR).a,
+                texture(colortex4, texcoord + a * GODRAY_FAR).a,
+                texture(colortex4, texcoord - a * GODRAY_FAR).a);
             vec3 dirW = normalize(viewDirToWorld(viewPos0));
-            color += godrayLight(texture(colortex4, texcoord).a, dirW);
+            color += godrayLight(shafts, dirW);
         }
     #endif
 
