@@ -69,7 +69,7 @@ const float sunPathRotation = -30.0; // [-45.0 -30.0 -20.0 -10.0 0.0 10.0 20.0 3
 // ---------------------------------------------------------------- Colour grading
 #define FILMIC_CURVE //Cinematic tone curve: deeper blacks, soft highlight roll-off, midtones unchanged.
 #define FILMIC_CONTRAST 100 // [50 75 100 125 150] Strength of the cinematic tone curve's shadow toe, percent.
-#define SPLIT_TONING //Warm sunlit highlights, cool shadows. Never tints the blue sky or warm lights.
+#define SPLIT_TONING //Warm sunlit highlights, cool shadows, daytime only. Never tints the sky, night or torch-lit caves.
 #define SPLIT_TONE_STRENGTH 100 // [50 75 100 150 200] Warm/cool toning amount, percent.
 #define VIGNETTE //Gently darkens the corners of the screen.
 #define VIGNETTE_STRENGTH 100 // [50 75 100 150 200] Vignette amount, percent.

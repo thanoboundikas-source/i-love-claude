@@ -1,12 +1,14 @@
 /*
-    final — sharpen, bloom, local contrast, vignette, tonemap + grade,
-    write to the screen (window resolution).
+    final — sharpen, local contrast, bloom, vignette, time-of-day exposure,
+    tonemap + grade, write to the screen (window resolution).
 
     Bloom costs no extra pass: Iris builds a mip chain of the HDR scene just
     before this program (colortex2MipmapEnabled) and five blurred levels are
-    gathered here with a small tent each. A threshold (1.0, soft knee 0.5)
-    means only real highlights bloom (sun, lava, glowstone, torches, glints);
-    the sky (0.5-0.8) and terrain never do, so there is no milky veil.
+    gathered here with a small tent each. A threshold (1.8, soft knee 0.3, so
+    nothing below 1.5 blooms) means only real highlights bloom (sun,
+    emissive blocks ~3, lava, glints). The sky (0.5-1.3) and even the
+    brightest sunlit diffuse surfaces (snow, white concrete, quartz, sand:
+    up to ~1.4) never do, so snowy and desert biomes get no milky veil.
     Level sizes follow the window height (1080p reference).
 */
 
@@ -17,8 +19,8 @@
 #include "/lib/tonemap.glsl"
 
 // Brightness given back by FILMIC_CURVE at night / golden hour (see below).
-const float FILMIC_NIGHT_GAIN = 1.5;
-const float FILMIC_GOLDEN_GAIN = 1.25;
+const float FILMIC_NIGHT_GAIN = 1.35;
+const float FILMIC_GOLDEN_GAIN = 1.40;
 
 uniform sampler2D colortex2;
 #if defined BLOOM || defined LOCAL_CONTRAST
@@ -42,8 +44,8 @@ vec3 mipTent(float lod) {
 #endif
 
 #ifdef BLOOM
-const float BLOOM_THRESHOLD = 1.0;
-const float BLOOM_KNEE = 0.5;
+const float BLOOM_THRESHOLD = 1.8;
+const float BLOOM_KNEE = 0.3;
 vec3 bloomKnee(vec3 s) {
     float l = luminance(s);
     float soft = clamp(l - BLOOM_THRESHOLD + BLOOM_KNEE, 0.0, 2.0 * BLOOM_KNEE);
@@ -112,11 +114,14 @@ void main() {
         // time-of-day exposure, not eye adaptation).
         // Underground counts as night, so a torch-lit cave looks the same at
         // noon and at midnight. FULLBRIGHT halves the toe, so half the gain.
+        // Golden hour (sun height 0-0.40) is where a flat top gets almost no
+        // sun; x1.40 there keeps the ground at its old brightness, and the
+        // gain blends into the night gain through twilight with no dip.
         float lowGain = FILMIC_NIGHT_GAIN;
         #ifdef FULLBRIGHT
             lowGain = 1.0 + (FILMIC_NIGHT_GAIN - 1.0) * 0.5;
         #endif
-        float goldenGate = (1.0 - smoothstep(0.0, 0.30, sunH)) * (1.0 - lowLightGate);
+        float goldenGate = (1.0 - smoothstep(0.0, 0.40, sunH)) * (1.0 - lowLightGate);
         hdr *= mix(1.0, lowGain, lowLightGate) * mix(1.0, FILMIC_GOLDEN_GAIN, goldenGate);
     #endif
 

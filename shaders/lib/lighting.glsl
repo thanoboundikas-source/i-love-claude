@@ -18,7 +18,7 @@ const vec3 TORCH_FAR   = vec3(1.00, 0.46, 0.16);   // deep amber at the edge of 
 // dimly lit areas stay readable (vanilla keeps level 3-6 visible too).
 float blockLightCurve(float b) {
     float b2 = b * b;
-    return 1.8 * b2 * b2 * b + 0.30 * b2 * sqrt(b) + 0.02 * b;
+    return 1.8 * b2 * b2 * b + 0.30 * b2 * sqrt(b) + 0.06 * b;
 }
 
 // Sky light reaching a surface (under trees, in overhangs, caves).

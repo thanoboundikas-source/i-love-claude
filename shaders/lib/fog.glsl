@@ -6,7 +6,9 @@
               In clear air it grows with distance squared, so the first ~100
               blocks stay crisp and only far land gains blue depth. Its colour
               is the sky behind the object, capped at the brightness the sun
-              and sky light could scatter, so it never lifts terrain to white.
+              and sky light could scatter, so it never lifts terrain to white;
+              the cap relaxes as the haze thickens, so rain fog converges on
+              the sky colour.
       border  fades the last 15% of render distance into the exact sky
               colour, so the edge of the loaded world is never visible
     Underground (little sky light at the eye) the haze fades out: caves stay
@@ -35,13 +37,19 @@ float fogHazeAmount(vec3 playerPos, float dist) {
     return haze * smoothstep(0.05, 0.45, eyeSky);
 }
 
-// Colour distant terrain fades toward: the sky behind it, but never brighter
-// than what the sun and sky light could scatter toward the camera. Keeps the
-// blue depth cue without lifting terrain toward a milky white.
-vec3 fogHazeColor(vec3 dir) {
+// Colour distant terrain fades toward: the sky behind it, but thin haze is
+// never brighter than what the sun and sky light could scatter toward the
+// camera. Keeps the blue depth cue without lifting terrain toward a milky
+// white. The cap relaxes as the haze thickens (haze = how much of the
+// object it hides), so thick fog (rain, thunder, the far distance) takes on
+// the sky's own colour and meets the border fade at about 80% of the sky's
+// brightness instead of plateauing at half of it and then jumping to the
+// sky over the last blocks (a bright band at the world edge in rain).
+vec3 fogHazeColor(vec3 dir, float haze) {
     vec3 c = fogSkyColor(dir);
     float l = luminance(c);
     float cap = luminance(directLight) * HAZE_CAP_SUN + luminance(ambientLight) * HAZE_CAP_SKY;
+    cap = mix(cap, l, haze);
     return c * (min(l, cap) / max(l, 1e-4));
 }
 
@@ -63,7 +71,8 @@ vec3 applyAirFog(vec3 color, vec3 playerPos) {
     if (isEyeInWater == 1) return color;   // water: lib/water.glsl
 
     #ifdef FOG
-        color = mix(color, fogHazeColor(dir), fogHazeAmount(playerPos, dist));
+        float haze = fogHazeAmount(playerPos, dist);
+        color = mix(color, fogHazeColor(dir, haze), haze);
         color = mix(color, fogSkyColor(dir), fogBorderAmount(playerPos));
     #else
         color = mix(color, fogSkyColor(dir), fogBorderAmount(playerPos));

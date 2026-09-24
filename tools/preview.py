@@ -6,7 +6,9 @@ Lets looks (sky palette, sunsets, clouds, fog, tonemap) be judged without
 launching Minecraft. It is NOT the game: no real terrain, no Iris, no TAA.
 
 Usage: python3 tools/preview.py SCENE [options]
-  SCENE: sky | clouds | clouds_above | clouds_flat | world | hut | lake | pbr
+  SCENE: sky | clouds | clouds_above | clouds_flat | world | hut | lake | snow | pbr
+  (snow = the world scene with snow-white ground and stone, a bloom test:
+  sunlit snow must not bloom or lift the shade around it)
 Output: previews/<SCENE>.png inside the repo (ignored by git), or --name.
 
 world / hut / lake use the game's HDR chain (two passes):
@@ -15,7 +17,7 @@ world / hut / lake use the game's HDR chain (two passes):
      lib/buffers.glsl, which is then mipmapped like Iris does;
   2. the pack's REAL final.fsh (sharpen + bloom + tonemap + dither) runs on it.
   Godrays: the same march as composite's godrayAmount() (GODRAY_SAMPLES
-  points to min(distance, 160), ign jitter) with the voxel tracer standing in
+  points to min(distance, 48), ign jitter) with the voxel tracer standing in
   for shadowtex1, then godrayLight() from lib/godrays.glsl, exactly where
   composite1 adds it. Each tile is rendered at the game's framebuffer size
   (--ss 4: 1920x1080, Chris' F2 screenshots) and box-averaged down to
@@ -428,6 +430,10 @@ PRESETS = [
     ("night", 0.75, 0.0, 0.0),
     ("rain noon", 0.25, 1.0, 0.0),
     ("thunder", 0.25, 1.0, 1.0),
+    # Real golden hour (sun ~6 degrees up with sunPathRotation -30). Kept at
+    # the end so row indices of older sheets stay the same.
+    ("golden am", 0.02, 0.0, 0.0),
+    ("golden pm", 0.48, 0.0, 0.0),
 ]
 
 
@@ -497,6 +503,12 @@ vec3 blockAlbedo(int id, vec3 n, vec2 uv, ivec3 b) {
     if (id == 5) c = vec3(0.23, 0.46, 0.14);
     if (id == 6) c = vec3(0.66, 0.52, 0.32);
     if (id == 7) c = vec3(0.95, 0.80, 0.45);
+#ifdef PREVIEW_SNOW
+    // Snow-covered ground and white-concrete-like stone (bloom test).
+    if (id == 1 || id == 2) c = n.y > 0.5 || id == 1 ? vec3(0.97, 0.98, 1.0) : c;
+    if (id == 3) c = vec3(0.81, 0.82, 0.82);
+    return c * (0.94 + 0.06 * r);
+#endif
     return c * (0.82 + 0.3 * r);
 }
 
@@ -553,8 +565,8 @@ vec3 previewWorld(vec3 dir) {
 }
 
 #ifdef GODRAYS_ACTIVE
-// Stand-in for composite's godrayAmount() (lib/godrays.glsl): the same march
-// and falloff, but light visibility at each point comes from the voxel
+// Stand-in for composite's godrayAmount() (lib/godrays.glsl): the same march,
+// shaft weight and falloff, but light visibility at each point comes from the voxel
 // tracer instead of shadowtex1.
 float previewGodrayAmount(vec3 dir, float hitDist, float jitter) {
     float dist = min(hitDist, 48.0);
@@ -566,7 +578,7 @@ float previewGodrayAmount(vec3 dir, float hitDist, float jitter) {
         vis += traceVoxels(p, lightDir, 96, b, n, t) ? 0.0 : 1.0;
     }
     vis /= float(GODRAY_SAMPLES);
-    return vis * vis * (1.0 - exp(-dist * 0.012));
+    return godrayShaftWeight(vis) * (1.0 - exp(-dist * 0.012));
 }
 #endif
 
@@ -807,15 +819,21 @@ if __name__ == "__main__":
                       hdr=True, godrays=True)
     elif scene == "hut":
         extra = WORLD_EXTRA.replace("PREVIEW_FOG_INCLUDE", FOG_INCLUDE).replace("PREVIEW_FOG_APPLY", FOG_APPLY)
-        pres = [p for p in PRESETS if p[0] in ("noon", "sunset", "night")]
+        pres = [p for p in PRESETS if p[0] in ("noon", "sunset", "night", "golden pm")]
         contact_sheet("previewWorld(dir)", CLOUD_EXTRA + extra, "hut", presets=pres,
                       textures=[("cloudTex", 0)], cam_y=66.6, cam_xz=(8.5, 3.0), look_at=(8.6, 65.6, 9.0),
                       hdr=True, godrays=True)
     elif scene == "lake":
         extra = WORLD_EXTRA.replace("PREVIEW_FOG_INCLUDE", FOG_INCLUDE).replace("PREVIEW_FOG_APPLY", FOG_APPLY)
-        pres = [p for p in PRESETS if p[0] in ("noon", "morning", "sunset", "night")]
+        pres = [p for p in PRESETS if p[0] in ("noon", "morning", "sunset", "night", "golden pm")]
         contact_sheet("previewLake(dir)", CLOUD_EXTRA + extra, "lake", presets=pres,
                       textures=[("cloudTex", 0)], cam_y=69.0, cam_xz=(-2.0, 2.0), look_at=(-18.0, 62.0, 18.0),
+                      hdr=True, godrays=True)
+    elif scene == "snow":
+        extra = WORLD_EXTRA.replace("PREVIEW_FOG_INCLUDE", FOG_INCLUDE).replace("PREVIEW_FOG_APPLY", FOG_APPLY)
+        pres = [p for p in PRESETS if p[0] in ("noon", "golden pm", "sunset")]
+        contact_sheet("previewWorld(dir)", CLOUD_EXTRA + "#define PREVIEW_SNOW 1\n" + extra, "snow", presets=pres,
+                      textures=[("cloudTex", 0)], pitch=-14.0, cam_y=71.0, cam_xz=(2.0, -9.0), look_at=(9.0, 65.0, 8.0),
                       hdr=True, godrays=True)
     elif scene == "pbr":
         pbr_sheet()

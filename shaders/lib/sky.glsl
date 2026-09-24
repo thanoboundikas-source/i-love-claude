@@ -83,17 +83,19 @@ void initSky() {
     // Direct light. The sun warms as it sinks and fades out just below the
     // horizon; the moon takes over at night.
     vec3 sunTint = mix(SUNLIGHT_NOON, SUNLIGHT_GOLDEN, 1.0 - smoothstep(0.0, 0.45, sunElev));
-    float sunI = 1.42 * smoothstep(0.0, 0.05, sunElev) * mix(0.72, 1.0, smoothstep(0.0, 0.30, sunElev));
+    float sunI = 1.42 * smoothstep(0.0, 0.05, sunElev);
     float moonI = 0.125 * moonPhaseBrightness() * smoothstep(0.0, 0.10, moonDir.y);
     float weatherDirect = mix(1.0, 0.075, rainF) * mix(1.0, 0.5, stormF);
     sunLight  = sunTint * sunI * weatherDirect;
     moonLight = MOON_COLOR * moonI * weatherDirect;
     directLight = lightIsSun ? sunLight : moonLight;
 
-    // Sky (ambient) light: a bluish white by day, dusky at sunset, dim blue at
-    // night. Overcast skies are dimmer but relatively brighter than the sun.
+    // Sky (ambient) light: a bluish white by day, a warm peach glow at sunset
+    // (the low sun lights the whole sky; a lilac fill turned golden-hour
+    // grass olive), dim blue at night. Overcast skies are dimmer but
+    // relatively brighter than the sun.
     vec3 ambDay    = vec3(0.56, 0.72, 1.00) * 0.40;
-    vec3 ambSunset = vec3(0.62, 0.56, 0.84) * 0.30;
+    vec3 ambSunset = vec3(0.88, 0.70, 0.62) * 0.40;
     vec3 ambNight  = vec3(0.40, 0.52, 0.85) * 0.040;
     ambientLight = mix(ambNight, ambDay, dayF);
     ambientLight = mix(ambientLight, ambSunset, sunsetF * 0.7 * (1.0 - dayF * 0.5));

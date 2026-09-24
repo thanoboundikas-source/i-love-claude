@@ -7,7 +7,15 @@
 */
 
 #ifdef GODRAYS_ACTIVE
-// Average light visibility along the ray, scaled by how much air there is.
+// Shafts only: squared light visibility along the ray (so partly lit rays
+// stand out from shadowed ones), faded to zero as the ray becomes fully lit.
+// A ray through open air (no shadow caster within the march) adds nothing,
+// so a low sun over open land never gets a glowing veil; the distance haze
+// in fog.glsl is the only open-air term.
+float godrayShaftWeight(float vis) {
+    return vis * vis * (1.0 - smoothstep(0.75, 1.0, vis));
+}
+
 float godrayAmount(vec3 playerEnd, float jitter) {
     float dist = min(length(playerEnd), 48.0);
     vec3 dir = playerEnd / max(length(playerEnd), 1e-4);
@@ -20,7 +28,7 @@ float godrayAmount(vec3 playerEnd, float jitter) {
         vis += inside ? texture(shadowtex1, sp) : 1.0;
     }
     vis /= float(GODRAY_SAMPLES);
-    return vis * vis * (1.0 - exp(-dist * 0.012));
+    return godrayShaftWeight(vis) * (1.0 - exp(-dist * 0.012));
 }
 
 // Henyey-Greenstein phase: strong forward scattering toward the light.
@@ -33,7 +41,7 @@ vec3 godrayLight(float amount, vec3 viewDirWorld) {
     float eyeSky = float(eyeBrightnessSmooth.y) / 240.0;
     float phase = phaseHG(dot(viewDirWorld, lightDir), 0.72);
     float strength = 0.08 * float(GODRAY_STRENGTH) * 0.01;
-    // The golden-hour key is up to 2x brighter than it used to be; keep the
+    // The golden-hour key is 2-3x brighter than the pre-v2 one; keep the
     // low-sun shafts at their old brightness so they never become a veil.
     float lowSun = mix(0.6, 1.0, smoothstep(0.0, 0.30, lightDir.y));
     return directLight * amount * phase * strength * lowSun * smoothstep(0.1, 0.6, eyeSky) * (1.0 - rainF * 0.6);
