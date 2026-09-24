@@ -107,17 +107,25 @@ are preserved in git history, commit d1cb592.)
     (0.62,0.56,0.84), night 0.040; about 5:1 sunlit:shaded tops; sun and moon
     exactly 0 at elevation 0 (no switch pop); faces 1/0.70/0.40; BOUNCE_LIGHT;
     rain direct 0.075, rain fill x0.95.
+    *Changed again 2026-09-24 (review), see #69:* sunset fill (0.88,0.70,0.62)
+    x 0.40 (warm peach, was lilac 0.30); the key keeps full strength down to
+    the horizon (the x0.72 low-sun factor is gone).
 21. **Block light curve** keeps a long gentle tail (levels 3–6 stay visible)
     with a hot core near torches; warm torch colour (1.0, 0.6, 0.3).
     *Changed 2026-09-24, see #67:* torch colour graded from TORCH_FAR
     (1,0.46,0.16) to TORCH_NEAR (1,0.66,0.36) (TORCH_COLOR (1,0.56,0.26) on
     forward/water paths), curve 1.8b^5 + 0.30b^2.5 + 0.02b.
+    *Changed again 2026-09-24 (review), see #70:* linear tail 0.06b (was
+    0.02b), so light levels 2-6 stay readable in caves.
 22. **Tonemap maps midtones 1:1** and only rolls off above 0.55, applied to
     the brightest channel so saturation is preserved; hot highlights drift
     toward white. Saturation option defaults to 105%.
     *Changed 2026-09-24, see #67:* FILMIC_CURVE (default on) adds a toe (t =
     0.04 x FILMIC_CONTRAST, a = 0.2) and a shoulder at 0.50, pivot 0.18 (0.18
     in = 0.18 out). Off gives exactly this old curve.
+    *Changed again 2026-09-24 (review), see #70:* the toe's black slope follows
+    the night/underground gate, a = mix(0.2, 0.55, gate): unchanged by day,
+    much gentler at night and in caves.
 
 ## Clouds
 
@@ -252,6 +260,9 @@ are preserved in git history, commit d1cb592.)
     + 3.6e-6 d) x d x height term; colour capped at 0.20 lum(direct) + 0.55
     lum(ambient); border 84-99% of render distance; haze and border applied as
     two mixes, not max().
+    *Changed again 2026-09-24 (review), see #74:* the colour cap relaxes as
+    the haze thickens (cap = mix(cap, sky, haze)), so rain fog converges on
+    the sky colour.
 52. **Caves stay clean**: haze fades out with the eye's sky light, so
     underground there is no bright sky-coloured fog. Lava, powder snow,
     blindness and darkness get their own fogs.
@@ -267,6 +278,8 @@ are preserved in git history, commit d1cb592.)
     *Changed 2026-09-24, see #67:* march 48 blocks, visibility squared, no
     +0.03 isotropic term, strength 0.08, low-sun factor mix(0.6, 1,
     smoothstep(0, 0.3, light elevation)).
+    *Changed again 2026-09-24 (review), see #73:* shaft weight
+    vis^2 x (1 - smoothstep(0.75, 1, vis)): a fully lit ray adds nothing.
 55. **Wet look**: in rainy biomes (`biome_precipitation == 1`, so no wet
     deserts or snow), sky-exposed surfaces — mostly tops — darken (albedo
     squared toward itself) and gain smoothness 0.85, which the generated
@@ -282,6 +295,8 @@ are preserved in git history, commit d1cb592.)
     space so bright pixels don't flicker. Current-frame weight 0.09 standing
     still, up to 0.30 while moving (sharper in motion). Held item is not
     reprojected. NaN/inf history is discarded.
+    *Changed 2026-09-24, see #67 and #72:* history fetched with a 5-tap
+    Catmull-Rom filter, clamped to the central 2x2 texels (anti-ringing).
 57. **Bloom has no pass of its own**: Iris generates colortex2's mip chain just
     before final; final gathers levels 2-6 with a 4-tap tent each. A soft
     knee (l/(l+0.9)) means midtones barely bloom and the image stays clean;
@@ -291,6 +306,8 @@ are preserved in git history, commit d1cb592.)
     highlights bloom), flat level weights 0.2, strength 0.20 x BLOOM_STRENGTH,
     mip levels offset by log2(viewHeight/1080) so the glow size does not
     depend on resolution.
+    *Changed again 2026-09-24 (review), see #71:* threshold 1.8, knee 0.3:
+    nothing below HDR luminance 1.5 blooms (sunlit snow is ~1.3).
 58. **Sharpening**: 5-tap unsharp mask in final, clamped to the neighbours'
     range (no halos), strength 0.6 x SHARPEN_AMOUNT.
 59. **No vignette, no chromatic aberration, no film grain, no lens flare** —
@@ -298,6 +315,8 @@ are preserved in git history, commit d1cb592.)
     *Changed 2026-09-24, see #67:* vignette and split toning are now IN (owner
     asked for cinematic), each with its own toggle and strength; still no
     chromatic aberration, film grain or lens flare.
+    *Split toning changed 2026-09-24 (review), see #75:* daytime surface only,
+    and blue pixels are never cooled.
 
 ## Generated PBR
 
@@ -425,3 +444,110 @@ are preserved in git history, commit d1cb592.)
     and midnight; entering a cave ramps up over eyeBrightnessSmooth's lag,
     which reads like eye adaptation. Lower FILMIC_NIGHT_GAIN to 1.3 if caves
     look too bright.
+    *Changed 2026-09-24 (review), see #69/#70:* night/underground gain 1.35,
+    golden gain 1.40 over sun height 0-0.40, dim_final x1.15.
+
+### Review fixes (two critics on look v2, 2026-09-24)
+
+Two reviews of the first look-v2 commit (a visual one on re-rendered
+previews, a technical one on the diff) found eight problems. All fixed; the
+constants are in the entries above marked "see #69-#76". check.sh: 80
+configs, 2497 compiles, 0 errors / 0 warnings; Apple GL 2497 and Iris
+patcher stage 193, 0 failed. Preview criteria from #67 still hold (35/35
+measured tiles); numbers below are INSANE, bottom 55% of each tile, sRGB.
+
+69. **Golden hour was dull olive.** Sun at 4-13 degrees: a flat top gets
+    almost no key (N.L = sin elevation), so it was lit by a lilac fill, and
+    the ground sat about 2 stops under noon with a blue cast. The old preview
+    hid it (sunrise/sunset presets are 1.6 degrees, morning 18.6). Changes:
+    sunset fill vec3(0.88, 0.70, 0.62) x 0.40 (a warm peach sky light; the
+    critic's (0.92, 0.68, 0.58) tipped the "no orange wash toward the sun"
+    check to G/R 1.38, this one keeps 1.42); the key's x0.72 low-sun factor
+    removed (godrayLight's lowSun term already keeps shafts in check);
+    FILMIC_GOLDEN_GAIN 1.25 -> 1.40 and its gate widened from sun height 0.30
+    to 0.40 (at 6 degrees the old gate only gave x1.17). The combined gain
+    now runs ~1.40 through twilight into the night's 1.35 with no dip.
+    Result, HEAD -> now: ground mean at 6 degrees 0.22 -> 0.27 (+21%), sunset
+    0.16-0.18 -> 0.22-0.24 (+34%), ground b/g 0.46-0.49 -> 0.41-0.42 (less
+    blue), saturation 0.59-0.61. The pre-v2 look had 0.28-0.29 at 6
+    degrees, but hazy (saturation 0.43-0.48), so golden hour is back to its
+    old brightness without the veil. Morning (18.6 degrees) +3%, noon
+    unchanged. tools/preview.py has "golden am" / "golden pm" presets (sun
+    ~6 degrees) at the end of the world, hut and lake sheets.
+70. **Night shadows crushed to black, and torch pools cut off too fast.**
+    The toe's black slope a = 0.2 cut everything below ~0.005 linear by 2
+    stops, and the x1.5 night gain only made up for that at ~0.035. Now
+    a = mix(0.2, 0.55, lowLightGate), so daytime frames are identical and
+    night/caves get a gentle toe; FILMIC_NIGHT_GAIN 1.5 -> 1.35; torch curve
+    tail 0.02b -> 0.06b. Night ground: pixels below 12/255 13.0/18.4% ->
+    6.6/8.6%, p5 8 -> 10-11 /255, mean vs pre-v2 +4.7% / +1.6%. Cave stone
+    lit by a torch (modelled through the whole chain), light levels
+    2/3/4/5/6: HEAD 2/3/5/9/16, now 5/8/12/17/23 (pre-v2 5/8/13/18/25);
+    level 15 stays a hot ~177 (pre-v2 126). dim_final's lift 1.25 -> 1.15:
+    with the gentler toe (it passes gate 1), 1.25 would have made Nether
+    midtones 21-27% brighter than the old curve; 1.15 keeps its usual
+    0.03-0.1 range within -5%..+11% (reasoned only, the preview cannot
+    render the Nether).
+71. **Bloom veiled snowy and desert biomes.** A threshold of 1.0 with a 0.5
+    knee starts blooming at 0.5; a sunlit snow top at noon is ~1.3. Now
+    BLOOM_THRESHOLD 1.8, BLOOM_KNEE 0.3: nothing below 1.5 blooms, which is
+    just over the brightest sunlit diffuse surface (~1.4). Emissive blocks
+    (~3), lava, glints and the sun (38) still bloom. New preview scene
+    `snow` (snow ground, white-concrete stone): bloom on/off difference at
+    noon HEAD 0.48 levels mean (max 15) -> 0.00 (max 1); around the sun it
+    is still up to 11-14 levels.
+72. **TAA drew dark 1 px outlines round very bright pixels in motion.** The
+    Catmull-Rom history's negative lobes turned a bright neighbour into a
+    negative value (sun disc, glowstone, lava, glints). Fix: clamp the
+    result to the min/max of the central 2x2 texels (4 texelFetch reads of
+    the texels the centre tap just read, so from the cache). 1D simulation
+    of the exact TAA loop (compress, 1.25 sigma clip, motion-weighted blend):
+    worst dark-side pixel vs truth, unclamped 0.12-0.61 -> 1.00 in every
+    case (sun/sky, glowstone/wall, lava/cave, sunlit/shade; 0.37-4.5
+    px/frame). 4 px detail kept in motion: 0.39-0.49 (bilinear 0.26-0.39,
+    unclamped 0.46-0.59). The critic's suggested clamp to the 5 bilinear
+    taps also removes the outlines, but the taps are already blurred, so it
+    clamps every detail peak to a bilinear value and keeps only 0.26-0.39,
+    the same as having no Catmull-Rom at all.
+73. **Godrays still glowed in open air at a low sun.** vis^2 is 1 for a ray
+    with nothing casting a shadow, so a low sun over open land added
+    +50-90% linear to backlit terrain. Now godrayAmount uses
+    godrayShaftWeight(vis) = vis^2 x (1 - smoothstep(0.75, 1.0, vis)):
+    identical to vis^2 for any ray that is at least 25% shadowed (forest
+    canopies, window light, cave mouths), zero for a fully lit ray. Chosen
+    over the critic's 4 vis (1 - vis): that one lifts heavily shadowed rays
+    (vis 0.1 -> 0.36 instead of 0.01), so a dim forest interior would get a
+    uniform glow and the lit:shadowed shaft contrast would fall from 9:1 to
+    2.3:1. Godray on/off difference: noon 0.30 -> 0.01 levels, sunset
+    toward the sun 0.47 -> 0.16 (p99 4 -> 2). The price: no glow in open air
+    beside a lone tree seen against the sun. That is what "never an open-air
+    glow" in the spec means. The preview mirror uses the same function.
+74. **Rain fog: bright band at the world edge.** The haze colour cap
+    (sun + sky light) fell to 59% of the horizon sky in rain, so the fog
+    plateaued at about half the sky's brightness and then the border fade
+    doubled it over the last blocks. Now fogHazeColor(dir, haze) relaxes the
+    cap with the haze amount itself: cap = mix(cap, sky luminance, haze).
+    Thin haze (all of clear weather within ~150 blocks, near rain fog) keeps
+    the cap, and thick fog converges on the sky colour. Model, rain noon,
+    far 192: fog at the border start 59% -> 82% of the sky (a clear noon is
+    84%), terrain at 160 blocks 0.110 -> 0.141, monotonic into the sky. The
+    critic's version (full relaxation whenever it rains) was tested: it also
+    greyed the near rain fog, and rain terrain saturation fell to 0.354 on
+    one tile (criterion >= 0.40). This version keeps 0.452 / 0.400.
+75. **Split toning tinted torch light and the night sky**, which the menu
+    text said it never does. Now splitTone(c, lowLightGate) scales both
+    weights by (1 - gate), so there is no toning at night, underground, in
+    torch-lit caves or in the Nether/End (dim_final passes gate 1). Blue
+    pixels are never cooled (the cool weight x (1 - blueness)), which also
+    spares the dusk and sunset zenith. Daytime shade is still cooled: the noon
+    darkest-quarter b/r is still 1.71-1.76x the sunlit quarter's. Menu text
+    (lang, settings.glsl) and the CLAUDE.md spec now say "daytime only".
+76. **Preview tooling.** Golden-hour presets (#69), the `snow` bloom test
+    (#71), godray mirror via godrayShaftWeight, and the docstring's march
+    length corrected (160 -> 48). Unchanged caveats: the 80x80-block preview
+    cannot show far fog or the border (#74 is modelled numerically), caves
+    (#70 torch levels are modelled), underwater or the Nether/End. The
+    "vignette off" corner ratio in #67's criteria (0.86-0.90) was already
+    0.78 before this round. That comes from the deeper, narrower sky
+    gradient, not the vignette, whose own effect (0.734 on vs 0.779 off)
+    matches the design.
