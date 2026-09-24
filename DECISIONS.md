@@ -295,3 +295,14 @@ are preserved in git history, commit d1cb592.)
     tonemap/saturation, FULLBRIGHT and night vision. No shadows, clouds or
     post there yet — those are the later prompts. The End sky box is drawn
     as-is; anything uncovered shows vanilla's fog colour.
+
+## Fixes after first in-game test
+
+66. **2026-09-24, pack failed to load: `gbuffers_line` removed.** Lunar's log
+    hides Iris's error text, so the failure was reproduced offline by running
+    Iris's real patcher (from the iris jar) on every draw type and linking the
+    result on Apple GL: only `LINES -> gbuffers_line` failed ("syntax error:
+    #version"). Iris only takes its core-profile line path when the pack ships
+    `gbuffers_line`; without it, outlines use `gbuffers_basic` via the normal
+    path, which also widens lines correctly. This check is now stage 3 of
+    check.sh.

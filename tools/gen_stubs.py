@@ -33,7 +33,11 @@ OVERWORLD = [
     ("gbuffers_armor_glint", "gbuffers_forward", "gbuffers_forward", "FW_ADDITIVE"),
     ("gbuffers_beaconbeam", "gbuffers_forward", "gbuffers_forward", "FW_GLOW"),
     ("gbuffers_basic", "gbuffers_forward", "gbuffers_forward", "FW_BASIC"),
-    ("gbuffers_line", "gbuffers_forward", "gbuffers_forward", "FW_BASIC"),
+    # No gbuffers_line on purpose: when a pack provides it, Iris 26.1 patches it
+    # through its core-profile path (IrisRenderingPipeline: isLines), which
+    # leaves "#version 330 compatibility" and ftransform() unconverted -> Apple
+    # GL rejects it and the whole pack fails to load. Without it, outlines fall
+    # back to gbuffers_basic, which Iris converts and widens correctly.
     ("gbuffers_water", "gbuffers_water", "gbuffers_water", None),
     ("gbuffers_skybasic", "gbuffers_sky", "gbuffers_sky", None),
     ("gbuffers_skytextured", "gbuffers_sky", "gbuffers_sky", None),

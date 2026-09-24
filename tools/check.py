@@ -465,6 +465,7 @@ def main():
 
     tmp = tempfile.mkdtemp(prefix="solstice-check-")
     use_apple = "--no-apple" not in sys.argv and build_applegl()
+    sys.argv = [a for a in sys.argv if a != "--no-iris"]
     apple_jobs = []
     seen = {}
     compiled = 0

@@ -41,6 +41,14 @@ profile rebinds Iris reload to I.) The `fullbrightnesstoggle` mod is installed
   context (`tools/applegl.c`, built automatically) — the same compiler the
   game uses. Run it after **every** change and fix everything it reports.
   `--no-apple` skips the Apple stage, `--apple-warnings` shows driver warnings.
+  **Stage 3** (`tools/iris_check.sh`) runs **Iris's real patcher** from the
+  iris jar on every Iris draw type (ShaderKey) with its real vertex format and
+  fallback rules, then links the patched code on Apple GL — the closest thing
+  to loading the pack in-game. Harness: `~/.solstice-dev/iris-harness`
+  (rebuild with `tools/iris-harness/setup.sh`; needs `brew install openjdk`).
+  `--no-iris` skips it. Lunar's log does NOT contain Iris's error text; if the
+  game still fails to load, reproduce it with stage 3 or ask Chris to click
+  "Copy Info" in chat and paste it.
   It is a strong typo catcher, not proof: the real Iris patcher and runtime
   behaviour are only tested in-game.
 - `./tools/gamelog.sh` — prints Iris/shader errors and link warnings from the
@@ -88,6 +96,12 @@ not show Iris INFO lines such as "Using shaderpack".
   Use `1.0 - smoothstep(b, a, x)`. check.sh fails on this.
 - Comments in shaders.properties start with `# ` (hash + space): Iris runs a C
   preprocessor over it, so `#word` can be read as a directive.
+- **Never add a `gbuffers_line` program.** If a pack provides it, Iris 26.1
+  patches it through its core-profile path (`isLines` in
+  IrisRenderingPipeline), which leaves `#version 330 compatibility` and
+  `ftransform()` unconverted; Apple GL rejects it and the whole pack fails to
+  load. Outlines fall back to `gbuffers_basic`, which works. (Found 2026-09-24,
+  first in-game load.)
 - Program stubs in `shaders/`, `shaders/nether/`, `shaders/end/` are generated
   by `tools/gen_stubs.py`; edit the table there, put code in `shaders/program/`.
 
