@@ -408,7 +408,7 @@ void main() {
 '''
 
 # Single pass (legacy / non-HDR scenes): tonemap in the scene shader.
-LDR_OUTPUT = """c = tonemapSolstice(c);
+LDR_OUTPUT = """c = tonemapSolstice(c, nightF);
     outColor = vec4(linearToSrgb(c), 1.0);"""
 # HDR chain: linear scene colour for final.fsh (colortex2 in the game).
 HDR_OUTPUT = "outColor = vec4(c, 1.0);"
@@ -523,6 +523,27 @@ bool traceVoxels(vec3 ro, vec3 rd, int steps, out ivec3 hitB, out vec3 hitN, out
 // the game, so the water surface for water): the godray march length.
 float previewHitDist = 1e4;
 
+float aoOcc(ivec3 c) { return blockAt(c) != 0 ? 0.2 : 1.0; }
+// Vanilla-style smooth-lighting AO (4 samples per vertex, bilinear across the face).
+float previewAO(ivec3 hb, vec3 n, vec3 p) {
+    ivec3 ni = ivec3(round(n));
+    ivec3 f = hb + ni;
+    ivec3 t1 = abs(n.x) > 0.5 ? ivec3(0, 1, 0) : ivec3(1, 0, 0);
+    ivec3 t2 = abs(n.z) > 0.5 ? ivec3(0, 1, 0) : ivec3(0, 0, 1);
+    vec3 fr = clamp(p - vec3(hb), 0.0, 1.0);
+    float u = dot(fr, vec3(t1)), v = dot(fr, vec3(t2));
+    float c[4];
+    for (int k = 0; k < 4; k++) {
+        int su = (k & 1) == 0 ? -1 : 1;
+        int sv = (k & 2) == 0 ? -1 : 1;
+        float a = aoOcc(f + t1 * su);
+        float b = aoOcc(f + t2 * sv);
+        float d = (a < 0.5 && b < 0.5) ? 0.2 : aoOcc(f + t1 * su + t2 * sv);
+        c[k] = (1.0 + a + b + d) * 0.25;
+    }
+    return mix(mix(c[0], c[1], u), mix(c[2], c[3], u), v);
+}
+
 vec3 shadeHit(vec3 ro, vec3 dir, out float hitDist);
 vec3 previewWorld(vec3 dir) {
     float hd;
@@ -536,7 +557,7 @@ vec3 previewWorld(vec3 dir) {
 // and falloff, but light visibility at each point comes from the voxel
 // tracer instead of shadowtex1.
 float previewGodrayAmount(vec3 dir, float hitDist, float jitter) {
-    float dist = min(hitDist, 160.0);
+    float dist = min(hitDist, 48.0);
     float stepLen = dist / float(GODRAY_SAMPLES);
     float vis = 0.0;
     for (int i = 0; i < GODRAY_SAMPLES; i++) {
@@ -545,7 +566,7 @@ float previewGodrayAmount(vec3 dir, float hitDist, float jitter) {
         vis += traceVoxels(p, lightDir, 96, b, n, t) ? 0.0 : 1.0;
     }
     vis /= float(GODRAY_SAMPLES);
-    return vis * (1.0 - exp(-dist * 0.012));
+    return vis * vis * (1.0 - exp(-dist * 0.012));
 }
 #endif
 
@@ -603,7 +624,7 @@ vec3 shadeHit(vec3 ro, vec3 dir, out float hitDist) {
     Surface s;
     s.albedo = srgbToLinear(blockAlbedo(id, hn, uv, hb));
     s.normal = hn; s.geoNormal = hn;
-    s.ao = 1.0; s.smoothness = 0.0; s.emissive = id == 7 ? 1.0 : 0.0;
+    s.ao = PREVIEW_AO_ON ? previewAO(hb, hn, p) : 1.0; s.smoothness = 0.0; s.emissive = id == 7 ? 1.0 : 0.0;
     s.flags = id == 5 ? FLAG_SSS : 0;
     vec3 sp = p + hn * 0.01;
     // sky light: open above?
@@ -625,7 +646,7 @@ vec3 shadeHit(vec3 ro, vec3 dir, out float hitDist) {
 """
 
 
-FOG_INCLUDE = '#include "/lib/fog.glsl"'
+FOG_INCLUDE = '#define PREVIEW_AO_ON true\n#include "/lib/fog.glsl"'
 FOG_APPLY = "col = applyAirFog(col, p - cameraPosition);"
 
 
@@ -720,7 +741,7 @@ void main() {
     s.smoothness = generatedSmoothness(alb, contrast, isMetal == 1);
     vec3 c = shadeSurface(s, vec3(1.0), vec3(0.0), 0.0);
     if (s.smoothness > 0.01) c += specularLighting(s, -dir, vec3(1.0));
-    outColor = vec4(linearToSrgb(tonemapSolstice(c)), 1.0);
+    outColor = vec4(linearToSrgb(tonemapSolstice(c, nightF)), 1.0);
 }
 """
 

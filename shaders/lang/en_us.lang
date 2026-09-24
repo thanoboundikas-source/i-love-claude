@@ -6,6 +6,7 @@ screen.WATER=Water
 screen.ATMOSPHERE=Atmosphere
 screen.POST=Post Processing
 screen.PBR=Generated Materials
+screen.GRADING=Colour Grading
 
 option.FULLBRIGHT=Fullbright
 option.FULLBRIGHT.comment=Lifts the darkest light so caves are visible without torches. The colours stay graded, never flat grey.
@@ -58,6 +59,11 @@ option.COLORED_LIGHT=Coloured Block Light
 option.COLORED_LIGHT.comment=Light near glowing blocks takes their colour: soul fire blue, lava orange, redstone red. Based on what is on screen.
 option.FOLIAGE_SSS=Leaf Translucency
 option.FOLIAGE_SSS.comment=Sunlight shines through leaves and plants.
+option.BOUNCE_LIGHT=Bounce Light
+option.BOUNCE_LIGHT.comment=Warm sunlight bounced off the ground onto walls and the undersides of blocks.
+option.AO_STRENGTH=Corner Shading
+option.AO_STRENGTH.comment=How dark block corners and crevices get in the shade (vanilla ambient occlusion). 50% = the old Solstice look, 0% = off.
+suffix.AO_STRENGTH=%
 option.sunPathRotation=Sun Path Angle
 option.sunPathRotation.comment=Tilts the path of the sun and moon so noon shadows are not straight down.
 
@@ -102,3 +108,21 @@ option.NORMAL_STRENGTH=Normal Strength
 suffix.NORMAL_STRENGTH=%
 option.GENERATED_SPECULAR=Generated Specular
 option.GENERATED_SPECULAR.comment=Glossy highlights on smooth and metal blocks, worked out from the vanilla textures.
+
+option.FILMIC_CURVE=Cinematic Tone Curve
+option.FILMIC_CURVE.comment=Deeper, cleaner blacks and a soft roll-off in the highlights, like a film camera. Midtones keep their vanilla brightness and colours stay saturated.
+option.FILMIC_CONTRAST=Cinematic Contrast
+option.FILMIC_CONTRAST.comment=How deep the shadows go with the Cinematic Tone Curve.
+suffix.FILMIC_CONTRAST=%
+option.SPLIT_TONING=Warm Light, Cool Shadows
+option.SPLIT_TONING.comment=Sunlit surfaces get a gentle golden warmth and shadows a slight cool tint. The blue sky and torch light are left alone.
+option.SPLIT_TONE_STRENGTH=Warm/Cool Amount
+suffix.SPLIT_TONE_STRENGTH=%
+option.VIGNETTE=Vignette
+option.VIGNETTE.comment=Gently darkens the corners of the screen, like a camera lens.
+option.VIGNETTE_STRENGTH=Vignette Amount
+suffix.VIGNETTE_STRENGTH=%
+option.LOCAL_CONTRAST=Local Contrast
+option.LOCAL_CONTRAST.comment=Deepens shadows that sit next to bright areas, which cuts through haze. Never brightens anything.
+option.LOCAL_CONTRAST_STRENGTH=Local Contrast Amount
+suffix.LOCAL_CONTRAST_STRENGTH=%

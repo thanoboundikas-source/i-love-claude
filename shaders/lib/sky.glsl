@@ -27,18 +27,21 @@ vec3 moonLight;     // direct moonlight colour * intensity
 vec3 directLight;   // light from lightDir (what the shadow map is for)
 vec3 ambientLight;  // sky light on an upward face under open sky
 
-const vec3 DAY_ZENITH      = vec3(0.13, 0.30, 0.86);
-const vec3 DAY_HORIZON     = vec3(0.50, 0.68, 1.00);
-const vec3 SUNSET_ZENITH   = vec3(0.11, 0.19, 0.50);
+const vec3 DAY_ZENITH      = vec3(0.08, 0.22, 0.80);
+const vec3 DAY_HORIZON     = vec3(0.34, 0.56, 1.00);
+const vec3 SUNSET_ZENITH   = vec3(0.07, 0.13, 0.44);
 const vec3 SUNSET_TOWARD   = vec3(1.00, 0.44, 0.15);
-const vec3 SUNSET_AWAY     = vec3(0.40, 0.33, 0.52);
-const vec3 SUNSET_AFTERGLOW = vec3(0.62, 0.30, 0.42);
+const vec3 SUNSET_AWAY     = vec3(0.42, 0.29, 0.52);
+const vec3 SUNSET_AFTERGLOW = vec3(0.66, 0.26, 0.42);
 const vec3 NIGHT_ZENITH    = vec3(0.0055, 0.0100, 0.0290);
 const vec3 NIGHT_HORIZON   = vec3(0.0130, 0.0210, 0.0440);
 
 const vec3 SUN_NOON        = vec3(1.00, 0.95, 0.88);
 const vec3 SUN_GOLDEN      = vec3(1.00, 0.60, 0.30);
 const vec3 MOON_COLOR      = vec3(0.58, 0.70, 1.00);
+// Light (not sky) colours: a warmer key than the sun disc/halo tints.
+const vec3 SUNLIGHT_NOON   = vec3(1.00, 0.91, 0.78);
+const vec3 SUNLIGHT_GOLDEN = vec3(1.00, 0.55, 0.24);
 
 const float SUN_RADIUS_COS  = 0.99952;  // ~1.8 degrees
 const float MOON_RADIUS_COS = 0.99939;  // ~2.0 degrees
@@ -71,7 +74,7 @@ void initSky() {
     zenithCol  = mix(NIGHT_ZENITH, DAY_ZENITH, dayF);
     zenithCol  = mix(zenithCol, SUNSET_ZENITH, sunsetF * 0.55);
     horizonCol = mix(NIGHT_HORIZON, DAY_HORIZON, dayF);
-    horizonCol = mix(horizonCol, SUNSET_AWAY, sunsetF * 0.65);
+    horizonCol = mix(horizonCol, SUNSET_AWAY, sunsetF * 0.75);
 
     float weatherDim = mix(1.0, 0.62, rainF) * mix(1.0, 0.6, stormF);
     zenithCol  = overcast(zenithCol, rainF * 0.85) * weatherDim;
@@ -79,22 +82,22 @@ void initSky() {
 
     // Direct light. The sun warms as it sinks and fades out just below the
     // horizon; the moon takes over at night.
-    vec3 sunTint = mix(SUN_NOON, SUN_GOLDEN, 1.0 - smoothstep(0.0, 0.40, sunElev));
-    float sunI = 1.15 * smoothstep(-0.03, 0.10, sunElev) * mix(0.55, 1.0, smoothstep(0.0, 0.35, sunElev));
-    float moonI = 0.10 * moonPhaseBrightness() * smoothstep(-0.03, 0.10, moonDir.y);
-    float weatherDirect = mix(1.0, 0.12, rainF) * mix(1.0, 0.5, stormF);
+    vec3 sunTint = mix(SUNLIGHT_NOON, SUNLIGHT_GOLDEN, 1.0 - smoothstep(0.0, 0.45, sunElev));
+    float sunI = 1.42 * smoothstep(0.0, 0.05, sunElev) * mix(0.72, 1.0, smoothstep(0.0, 0.30, sunElev));
+    float moonI = 0.125 * moonPhaseBrightness() * smoothstep(0.0, 0.10, moonDir.y);
+    float weatherDirect = mix(1.0, 0.075, rainF) * mix(1.0, 0.5, stormF);
     sunLight  = sunTint * sunI * weatherDirect;
     moonLight = MOON_COLOR * moonI * weatherDirect;
     directLight = lightIsSun ? sunLight : moonLight;
 
     // Sky (ambient) light: a bluish white by day, dusky at sunset, dim blue at
     // night. Overcast skies are dimmer but relatively brighter than the sun.
-    vec3 ambDay    = vec3(0.60, 0.75, 1.00) * 0.62;
-    vec3 ambSunset = vec3(0.74, 0.62, 0.70) * 0.34;
-    vec3 ambNight  = vec3(0.40, 0.52, 0.85) * 0.045;
+    vec3 ambDay    = vec3(0.56, 0.72, 1.00) * 0.40;
+    vec3 ambSunset = vec3(0.62, 0.56, 0.84) * 0.30;
+    vec3 ambNight  = vec3(0.40, 0.52, 0.85) * 0.040;
     ambientLight = mix(ambNight, ambDay, dayF);
     ambientLight = mix(ambientLight, ambSunset, sunsetF * 0.7 * (1.0 - dayF * 0.5));
-    ambientLight = overcast(ambientLight, rainF * 0.7) * mix(1.0, 0.66, rainF) * mix(1.0, 0.7, stormF);
+    ambientLight = overcast(ambientLight, rainF * 0.7) * mix(1.0, 0.95, rainF) * mix(1.0, 0.7, stormF);
 }
 
 // ---------------------------------------------------------------- sky
@@ -119,7 +122,7 @@ vec3 skyGradient(vec3 dir) {
     float h = dir.y;
     float hp = max(h, 0.0);
 
-    vec3 col = mix(zenithCol, horizonCol, exp(-hp * 6.0));
+    vec3 col = mix(zenithCol, horizonCol, exp(-hp * 8.0));
 
     // Sunrise / sunset band: thin, hugging the horizon, orange toward the
     // sun and soft purple away from it. Zenith stays blue -> no orange soup.
@@ -131,7 +134,7 @@ vec3 skyGradient(vec3 dir) {
     vec3 towardCol = mix(SUNSET_TOWARD, SUNSET_AFTERGLOW, afterglow);
     vec3 band = mix(SUNSET_AWAY, towardCol, toward * toward * toward);
     band = overcast(band, rainF * 0.9) * mix(1.0, 0.6, rainF);
-    float bandMix = exp(-hp * 9.0) * sunsetF * (0.30 + 0.70 * toward);
+    float bandMix = exp(-hp * 9.0) * sunsetF * (1.0 - smoothstep(0.05, 0.32, sunElev)) * (0.30 + 0.70 * toward);
     col = mix(col, band, bandMix);
 
     // Below the horizon (seen past the world edge / in the void) fade to a
@@ -142,7 +145,7 @@ vec3 skyGradient(vec3 dir) {
     float cs = max(cosSun, 0.0);
     vec3 haloTint = mix(SUN_NOON, SUN_GOLDEN, sunsetF);
     float sunUp = smoothstep(-0.12, 0.02, sunElev);
-    col += haloTint * (pow(cs, 5.0) * 0.07 + pow(cs, 60.0) * 0.30) * sunUp * mix(1.0, 1.8, sunsetF) * (1.0 - rainF * 0.8);
+    col += haloTint * (pow(cs, 8.0) * 0.04 + pow(cs, 120.0) * 0.22) * sunUp * mix(1.0, 1.8, sunsetF) * (1.0 - rainF * 0.8);
 
     float cm = max(dot(dir, moonDir), 0.0);
     col += MOON_COLOR * pow(cm, 40.0) * 0.015 * nightF * (1.0 - rainF);

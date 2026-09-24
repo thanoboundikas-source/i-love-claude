@@ -20,6 +20,9 @@ void main() {
     // Drawn geometry was blended over a transparent black clear; whatever is
     // left uncovered shows the vanilla fog colour behind it.
     vec3 lin = scene.rgb + srgbToLinear(fogColor) * (1.0 - saturate(scene.a));
-    vec3 c = linearToSrgb(tonemapSolstice(lin));
+    #ifdef FILMIC_CURVE
+        lin *= 1.25;   // the cinematic toe darkens these dim dimensions; give it back
+    #endif
+    vec3 c = linearToSrgb(tonemapSolstice(lin, 1.0));
     outColor = vec4(saturate(c + ditherRGB8(gl_FragCoord.xy)), 1.0);
 }

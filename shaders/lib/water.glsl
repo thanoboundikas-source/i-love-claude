@@ -24,7 +24,7 @@ vec3 waterWaveNormal(vec3 worldPos, vec3 geoNormal, float dist) {
         float h0 = waveHeight(p, t);
         float hx = waveHeight(p + vec2(e, 0.0), t);
         float hz = waveHeight(p + vec2(0.0, e), t);
-        float amp = 0.45 * (1.0 - smoothstep(20.0, 90.0, dist));
+        float amp = 0.30 * (1.0 - smoothstep(20.0, 90.0, dist));
         vec3 n = normalize(vec3(-(hx - h0) / e * amp, 1.0, -(hz - h0) / e * amp));
         return n;
     #else
@@ -41,7 +41,7 @@ float waterFresnel(float cosTheta) {
 // Blue water absorbs red first, so deep water turns blue, shallow stays clear.
 vec3 waterAbsorption(vec3 tintSrgb) {
     vec3 t = srgbToLinear(tintSrgb);
-    return (1.0 - t) * 0.30 + 0.025;
+    return (1.0 - t) * 0.50 + vec3(0.06, 0.04, 0.02);
 }
 
 // Colour of light scattered back by the water body (what deep water looks
@@ -49,7 +49,7 @@ vec3 waterAbsorption(vec3 tintSrgb) {
 vec3 waterScatterColor(vec3 tintSrgb, float skyLight) {
     vec3 t = srgbToLinear(tintSrgb);
     vec3 light = ambientLight * (0.25 + 0.75 * skyLight * skyLight) + directLight * 0.18 * skyLight;
-    return t * light * 0.42;
+    return t * light * 0.60;
 }
 
 // Sharp sun glint (GGX, low roughness) on the wave normal.

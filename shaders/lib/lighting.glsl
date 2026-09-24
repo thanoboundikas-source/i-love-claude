@@ -10,13 +10,15 @@
       floor   - tiny minimum so caves are not pure black (FULLBRIGHT lifts it)
 */
 
-const vec3 TORCH_COLOR = vec3(1.00, 0.60, 0.30);
+const vec3 TORCH_COLOR = vec3(1.00, 0.56, 0.26);   // mid colour (forward/water paths)
+const vec3 TORCH_NEAR  = vec3(1.00, 0.66, 0.36);   // hot core next to the source
+const vec3 TORCH_FAR   = vec3(1.00, 0.46, 0.16);   // deep amber at the edge of the pool
 
 // Block light brightness: bright near the source, a long gentle tail so
 // dimly lit areas stay readable (vanilla keeps level 3-6 visible too).
 float blockLightCurve(float b) {
     float b2 = b * b;
-    return 1.4 * b2 * b2 + 0.12 * b * sqrt(b);
+    return 1.8 * b2 * b2 * b + 0.30 * b2 * sqrt(b) + 0.02 * b;
 }
 
 // Sky light reaching a surface (under trees, in overhangs, caves).
@@ -24,10 +26,11 @@ float skyLightCurve(float s) {
     return s * s * s;
 }
 
-// Vanilla-like face shading for the ambient term: top 1.0, sides ~0.8,
-// bottom ~0.6. Keeps the vanilla look in shade.
+// Face shading for the ambient term: top 1.0, sides 0.70, bottom 0.40, so
+// blocks in shade keep a readable form (BOUNCE_LIGHT adds warm light back to
+// sides and bottoms by day).
 float ambientDirectional(vec3 n) {
-    return 0.8 + 0.2 * n.y;
+    return 0.70 + 0.30 * n.y;
 }
 
 // Minimum light in the dark. FULLBRIGHT (and night vision) lift it with a
@@ -67,11 +70,11 @@ float lightLeakGuard(float sky) {
 
 // Block-light colour. COLORED_LIGHT passes a screen-space tint (see
 // deferred_lighting.fsh); otherwise torches are warm everywhere.
-vec3 blockLightColor(vec3 tint, float tintWeight) {
-    vec3 c = TORCH_COLOR;
+vec3 blockLightColor(vec3 tint, float tintWeight, float b) {
+    vec3 c = mix(TORCH_FAR, TORCH_NEAR, smoothstep(0.55, 1.0, b));
     #ifdef COLORED_LIGHT
         float l = max(luminance(tint), 1e-4);
-        vec3 t = tint / l * luminance(TORCH_COLOR);
+        vec3 t = tint / l * luminance(c);
         c = mix(c, t, tintWeight);
     #endif
     return c;
@@ -92,15 +95,26 @@ vec3 shadeSurface(Surface s, vec3 shadow, vec3 blockTint, float blockTintWeight)
 
     vec3 direct = directLight * diffuse * shadow;
 
-    float skyAmb = skyLightCurve(s.light.y);
-    vec3 ambient = ambientLight * skyAmb * ambientDirectional(s.normal) * s.ao;
+    // Vanilla AO is stored as the multiplier vanilla applies to sRGB colour;
+    // squaring it gives the same visible strength in linear light.
+    float ao2 = pow(max(s.ao, 0.001), float(AO_STRENGTH) * 0.02);
 
-    vec3 block = blockLightColor(blockTint, blockTintWeight) * blockLightCurve(s.light.x) * mix(1.0, s.ao, 0.7);
+    float skyAmb = skyLightCurve(s.light.y);
+    vec3 ambient = ambientLight * skyAmb * ambientDirectional(s.normal) * ao2;
+
+    #ifdef BOUNCE_LIGHT
+        // Sun/moon light bounced off the ground onto walls and undersides:
+        // a warm fill against the cool sky fill (none on tops, full on bottoms).
+        ambient += directLight * (max(lightDir.y, 0.0) * 0.08) * vec3(1.00, 0.90, 0.70)
+                 * (0.5 - 0.5 * s.normal.y) * skyAmb * ao2;
+    #endif
+
+    vec3 block = blockLightColor(blockTint, blockTintWeight, s.light.x) * blockLightCurve(s.light.x) * mix(1.0, ao2, 0.8);
 
     // Metals reflect most of their light specularly; keep some diffuse so
     // iron and gold blocks still read as their colour indoors.
     vec3 diffuseAlbedo = (s.flags & FLAG_METAL) != 0 ? s.albedo * 0.6 : s.albedo;
-    vec3 lit = diffuseAlbedo * (direct + ambient + block + ambientFloor() * s.ao);
+    vec3 lit = diffuseAlbedo * (direct + ambient + block + ambientFloor() * ao2);
     lit += s.albedo * s.emissive * 4.0;
     return lit;
 }

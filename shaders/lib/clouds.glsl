@@ -53,17 +53,20 @@ float cloudCoverageSmooth(vec2 worldXZ) {
 // Light arriving at a cloud face with normal n (world space).
 vec3 cloudFaceLight(vec3 n, vec3 viewDir, float sunShadow) {
     float ndl = dot(n, lightDir);
-    // Clouds scatter light through themselves: faces turned away from the
-    // sun still get some, so the far side is softly shaded, not black.
-    float direct = max(ndl, 0.0) * 0.85 + 0.20;
-    vec3 light = directLight * direct * sunShadow;
+    // Sun-dominated like a real cloud: faces toward the light get the full
+    // sun (shadowed by clouds in front); every face also gets 0.22 of it,
+    // scattered through the cloud body (never shadowed), so shade stays
+    // bright and neutral instead of taking on the sky's blue. At sunset the
+    // high cloud layer still catches the sun after the ground has lost it.
+    float glow = 1.0 + 1.2 * sunsetF * step(0.0, dot(lightDir, sunDir));
+    vec3 light = directLight * glow * (max(ndl, 0.0) * sunShadow + 0.22);
 
-    // Sky light: tops see the whole sky, sides half, undersides mostly the
-    // horizon and ground, tinted with the sunset band.
+    // Sky light, much weaker than the sun: tops see the zenith, undersides
+    // the horizon (and its sunset band).
     vec3 horizonTint = skyGradient(normalize(vec3(viewDir.x, 0.04, viewDir.z)));
-    vec3 skyTop = mix(horizonCol, zenithCol, 0.35) * 1.4 + ambientLight * 0.4;
-    vec3 under = horizonTint * 0.55 + ambientLight * 0.30;
-    vec3 side = mix(under, skyTop, 0.55);
+    vec3 skyTop = ambientLight * 0.80 + zenithCol * 0.15 + horizonTint * (0.35 * sunsetF);
+    vec3 under = horizonTint * (0.30 + 0.20 * sunsetF) + ambientLight * 0.35;
+    vec3 side = mix(under, skyTop, 0.50);
     vec3 amb = n.y > 0.5 ? skyTop : (n.y < -0.5 ? under : side);
     // Rain clouds are heavy and grey.
     return (light + amb) * mix(1.0, 0.62, rainF) * mix(1.0, 0.75, stormF);
@@ -176,11 +179,11 @@ vec4 flatClouds(vec3 origin, vec3 dir, float maxDist, out float hitDist) {
 // the cloud field never ends in a hard line.
 vec4 fadeClouds(vec4 c, vec3 dir, float hitDist) {
     if (c.a <= 0.0 || hitDist < 0.0) return c;
-    float haze = 1.0 - exp(-hitDist / 900.0);
+    float haze = 1.0 - exp(-hitDist / 1400.0);
     vec3 skyBehind = skyGradient(dir);
     vec3 col = c.rgb / max(c.a, 1e-4);
-    col = mix(col, skyBehind, haze * 0.75);
-    float thin = 1.0 - smoothstep(1100.0, 2400.0, hitDist);
+    col = mix(col, skyBehind, haze * 0.60);
+    float thin = 1.0 - smoothstep(800.0, 2000.0, hitDist);
     float a = c.a * thin;
     return vec4(col * a, a);
 }

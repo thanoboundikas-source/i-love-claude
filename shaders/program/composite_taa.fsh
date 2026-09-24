@@ -42,6 +42,32 @@ vec3 fetchC(ivec2 p, ivec2 maxP) {
     return toYCoCg(compress(texelFetch(colortex2, clamp(p, ivec2(0), maxP), 0).rgb));
 }
 
+// History fetch with a 5-tap Catmull-Rom filter (bilinear taps at the
+// combined weights, the 4 corner taps dropped): keeps the history sharp while
+// the camera moves, where a single bilinear fetch blurs it a little more
+// every frame.
+vec3 historyCatmullRom(vec2 uv) {
+    vec2 res = vec2(viewWidth, viewHeight);
+    vec2 pos = uv * res;
+    vec2 c = floor(pos - 0.5) + 0.5;
+    vec2 f = pos - c;
+    vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+    vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+    vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+    vec2 w3 = f * f * (-0.5 + 0.5 * f);
+    vec2 w12 = w1 + w2;
+    vec2 t0 = (c - 1.0) / res;
+    vec2 t3 = (c + 2.0) / res;
+    vec2 t12 = (c + w2 / w12) / res;
+    float a = w12.x * w0.y, b = w0.x * w12.y, m = w12.x * w12.y, d = w3.x * w12.y, e = w12.x * w3.y;
+    vec3 s = texture(colortex5, vec2(t12.x, t0.y)).rgb * a
+           + texture(colortex5, vec2(t0.x, t12.y)).rgb * b
+           + texture(colortex5, t12).rgb * m
+           + texture(colortex5, vec2(t3.x, t12.y)).rgb * d
+           + texture(colortex5, vec2(t12.x, t3.y)).rgb * e;
+    return s / (a + b + m + d + e);
+}
+
 // Clip a colour toward the centre of an AABB (keeps hue, avoids flat clamps).
 vec3 clipToBox(vec3 hist, vec3 lo, vec3 hi) {
     vec3 c = 0.5 * (lo + hi);
@@ -87,7 +113,7 @@ void main() {
 
     vec3 result;
     bool offscreen = any(lessThan(prevUV, vec2(0.0))) || any(greaterThan(prevUV, vec2(1.0)));
-    vec3 histRaw = texture(colortex5, prevUV).rgb;
+    vec3 histRaw = historyCatmullRom(prevUV);
     if (offscreen || any(isnan(histRaw)) || any(isinf(histRaw))) {
         result = fromYCoCg(cur);
     } else {

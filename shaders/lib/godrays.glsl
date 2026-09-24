@@ -9,7 +9,7 @@
 #ifdef GODRAYS_ACTIVE
 // Average light visibility along the ray, scaled by how much air there is.
 float godrayAmount(vec3 playerEnd, float jitter) {
-    float dist = min(length(playerEnd), 160.0);
+    float dist = min(length(playerEnd), 48.0);
     vec3 dir = playerEnd / max(length(playerEnd), 1e-4);
     float stepLen = dist / float(GODRAY_SAMPLES);
     float vis = 0.0;
@@ -20,7 +20,7 @@ float godrayAmount(vec3 playerEnd, float jitter) {
         vis += inside ? texture(shadowtex1, sp) : 1.0;
     }
     vis /= float(GODRAY_SAMPLES);
-    return vis * (1.0 - exp(-dist * 0.012));
+    return vis * vis * (1.0 - exp(-dist * 0.012));
 }
 
 // Henyey-Greenstein phase: strong forward scattering toward the light.
@@ -31,8 +31,11 @@ float phaseHG(float cosTheta, float g) {
 
 vec3 godrayLight(float amount, vec3 viewDirWorld) {
     float eyeSky = float(eyeBrightnessSmooth.y) / 240.0;
-    float phase = phaseHG(dot(viewDirWorld, lightDir), 0.72) + 0.03;
-    float strength = 0.10 * float(GODRAY_STRENGTH) * 0.01;
-    return directLight * amount * phase * strength * smoothstep(0.1, 0.6, eyeSky) * (1.0 - rainF * 0.6);
+    float phase = phaseHG(dot(viewDirWorld, lightDir), 0.72);
+    float strength = 0.08 * float(GODRAY_STRENGTH) * 0.01;
+    // The golden-hour key is up to 2x brighter than it used to be; keep the
+    // low-sun shafts at their old brightness so they never become a veil.
+    float lowSun = mix(0.6, 1.0, smoothstep(0.0, 0.30, lightDir.y));
+    return directLight * amount * phase * strength * lowSun * smoothstep(0.1, 0.6, eyeSky) * (1.0 - rainF * 0.6);
 }
 #endif

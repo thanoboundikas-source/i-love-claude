@@ -40,6 +40,8 @@ const bool shadowHardwareFiltering = true;
 #define COLORED_SHADOWS //Stained glass and water tint the light that passes through them.
 #define COLORED_LIGHT //Block light takes the colour of nearby glowing blocks on screen (soul fire blue, lava orange, redstone red).
 #define FOLIAGE_SSS //Leaves and plants let some sunlight through.
+#define BOUNCE_LIGHT //Warm sunlight bounced off the ground onto walls and undersides.
+#define AO_STRENGTH 100 // [0 50 100 150 200] Darkening in block corners and crevices (vanilla ambient occlusion), percent. 50 = the old Solstice look.
 const float sunPathRotation = -30.0; // [-45.0 -30.0 -20.0 -10.0 0.0 10.0 20.0 30.0 45.0]
 
 // ---------------------------------------------------------------- Water
@@ -63,6 +65,16 @@ const float sunPathRotation = -30.0; // [-45.0 -30.0 -20.0 -10.0 0.0 10.0 20.0 3
 #define TAA //Temporal anti-aliasing: smooth edges, stable shimmer-free image.
 #define SHARPEN //Light sharpening after TAA.
 #define SHARPEN_AMOUNT 50 // [25 50 75 100] Sharpening strength, percent.
+
+// ---------------------------------------------------------------- Colour grading
+#define FILMIC_CURVE //Cinematic tone curve: deeper blacks, soft highlight roll-off, midtones unchanged.
+#define FILMIC_CONTRAST 100 // [50 75 100 125 150] Strength of the cinematic tone curve's shadow toe, percent.
+#define SPLIT_TONING //Warm sunlit highlights, cool shadows. Never tints the blue sky or warm lights.
+#define SPLIT_TONE_STRENGTH 100 // [50 75 100 150 200] Warm/cool toning amount, percent.
+#define VIGNETTE //Gently darkens the corners of the screen.
+#define VIGNETTE_STRENGTH 100 // [50 75 100 150 200] Vignette amount, percent.
+//#define LOCAL_CONTRAST //Deepens shadows next to bright areas (dehaze). Never brightens anything.
+#define LOCAL_CONTRAST_STRENGTH 100 // [50 100 150 200] Local contrast amount, percent.
 
 // ---------------------------------------------------------------- Generated PBR
 #define GENERATED_NORMALS //Bumpy surface detail generated from the vanilla textures.
