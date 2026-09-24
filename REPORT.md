@@ -1,5 +1,9 @@
 # Solstice — Overworld build report
 
+> This describes the first build (2026-09-23). On 2026-09-24 the look was
+> replaced by look v2, "clear and cinematic": no haze, stronger lighting and
+> colour grading. See CLAUDE.md, *The look*, and DECISIONS #67–#101.
+
 Built 2026-09-23 in one session, without in-game testing (I cannot press keys in
 your game). Everything is committed in git, one commit per step. Read
 **"Test these first"** before anything else.

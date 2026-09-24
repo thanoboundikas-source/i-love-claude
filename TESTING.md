@@ -26,9 +26,9 @@ on/off, **I** reloads shaders.
    *Shaders: Disabled*, click it so it says *Enabled*. Select **Solstice**, click **Apply**, then
    **Done**. If chat shows *"The shaderpack failed to load!"*, stop here and
    tell me. I'll read the log myself; no need to copy anything.
-4. **Use the default profile.** Press **O** → **Shader Pack Settings...**. The
-   *Profile* button should say **REGULAR**. Leave Reimagined on its own
-   default settings too.
+4. **Use the profile you play.** Press **O** → **Shader Pack Settings...**.
+   Leave Solstice on **INSANE** (the look was tuned there). Leave Reimagined
+   on its own default settings.
 5. **Make a test world.** Singleplayer → **Create New World** → Game Mode
    **Creative**, **Allow Commands: ON**. (For an existing world: Esc →
    **Open to LAN** → **Allow Commands: ON** → **Start LAN World**.)

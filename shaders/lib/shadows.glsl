@@ -90,8 +90,12 @@ vec3 shadowVisibility(vec3 playerPos, vec3 geoNormal, float noise) {
     // than the ~0.04-block normal offset near the player) reached into the
     // surface itself on the side toward the light: sunlit ground within
     // ~15-20 blocks lost 8-25% of its key at sun heights 6-45 degrees, with
-    // a faint sawtooth at the shadow-texel spacing (DECISIONS #96). Real
-    // casters are unaffected: they sit in front of the plane. The slope is
+    // a faint sawtooth at the shadow-texel spacing (DECISIONS #96). The
+    // plane only ever moves the reference toward the light (taps where the
+    // surface rises toward the light); on the far side the true surface is
+    // always deeper than the centre, and extending the plane there made a
+    // sun-facing wall behind the pixel count as a caster: a dark band on
+    // lit ground at the foot of every wall, step and trunk (#101). The slope is
     // the same whichever way the normal points, so the sign of nS.z is
     // kept; |nS.z| >= 0.02 bounds it for faces edge-on to the light.
     vec3 nS = mat3(shadowModelView) * geoNormal;
@@ -108,7 +112,7 @@ vec3 shadowVisibility(vec3 playerPos, vec3 geoNormal, float noise) {
     float opaque = 0.0;
     for (int i = 0; i < SHADOW_TAPS; i++) {
         vec2 o = vogel(i, SHADOW_TAPS, angle) * radiusClip;
-        opaque += texture(shadowtex1, tapToScreen(clip + vec3(o, dot(dzdxy, o))));
+        opaque += texture(shadowtex1, tapToScreen(clip + vec3(o, min(dot(dzdxy, o), 0.0))));
     }
     opaque /= float(SHADOW_TAPS);
 

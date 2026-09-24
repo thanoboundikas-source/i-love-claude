@@ -1043,8 +1043,10 @@ noon R mean -16.2%). Comparison sheet: previews/round3_compare.png.
     ground 50.9 vs 52.1 on; sunlit grass (54,66,33), not golden, the #69
     look). check.sh flips it to 0 and 85. Not tested: entities (*since
     #97 they use their own normal*) and
-    NORMAL_STRENGTH 200, where bevels past ~41 degrees blend partly back to
-    the bumped normal (confirm in game).
+    NORMAL_STRENGTH 200, where bevels past ~26 degrees blend partly back to
+    the bumped normal, fully past ~41 (*corrected, #101:* at a 6-degree sun
+    2-5% of cobblestone / dirt top area gets no key at strength 200,
+    0.4-0.6% at 100, modelled on the 26.1.2 textures; confirm in game).
 88. **Morning and afternoon were underexposed (the "lighting" complaint).**
     The lift faded (sunsetF, gone by sun height 0.45) faster than sin(e)
     grew, and the golden gain faded with it, so a flat top's key *fell*
@@ -1400,3 +1402,28 @@ the session scratchpad r5/ (halo.py, shadow/rp.py, shadow/step.py).
     FILMIC_CURVE; it now says "with the Cinematic Tone Curve on".
     previews/round3_compare.png regenerated from this commit (the old
     look re-rendered with the same preview, including #99's sky light).
+
+### After the fifth review (2026-09-24)
+
+101. **Receiver-plane shadow taps are one-sided.** The sixth technical
+    review modelled a concave corner #96 had not: sunlit ground at the foot
+    of a sun-facing wall, step or trunk. Taps on the side away from the
+    light compared against the ground plane extended into the wall, and
+    the wall's sun-facing face lies in front of that plane, so it counted
+    as a caster: sun visibility 0.53-0.76 within 0.3 blocks of the wall at
+    a 6-degree sun (0.82-0.88 before #96), an AO-like band on fully lit
+    ground in every golden-hour and morning scene. Fix: the plane offset is
+    `min(dot(dzdxy, o), 0.0)`, so it only moves the reference toward the
+    light; on the away side the true surface is always deeper than the
+    centre, so no plane is needed there. Reviewer's model (scratchpad
+    tc5/rp3.py): flat ground 1.00 at every distance and angle (keeps #96),
+    lit corner 1.00 at 3-35 degrees, the shaded step's penumbra and 0.00
+    contact edge identical to #96. The preview traces voxel shadows and
+    cannot show this; confirm in game (a wall facing a low sun: no dark
+    strip on the lit ground at its base). Also corrected: the
+    terrainFaceNormal comment and #87 on where the face snap blends back
+    (from ~26 degrees, not ~41). Left as a taste call for Chris: at
+    sunrise and golden hour sunlit leaf sides read mustard/khaki (the
+    3100 K key on low-blue foliage, B ~6/255); if he dislikes it, try a
+    small sky-fill term on lit leaves in the FOLIAGE_SSS branch, not a
+    bluer SUNLIGHT_GOLDEN (#89: sunset snow drops below R/B 1.25).

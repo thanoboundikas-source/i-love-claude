@@ -82,10 +82,10 @@ vec3 blockLightColor(vec3 tint, float tintWeight, float b) {
 }
 
 // The block face a (possibly bumped) terrain normal belongs to. Terrain
-// faces are axis-aligned and generated bevels tilt them by well under 45
+// faces are axis-aligned and most generated bevels tilt them by under ~26
 // degrees, so the largest axis is the face. Normals far from every axis
-// (cross-shaped plants, very strong bevels) blend back to themselves: no
-// hard switch. Only valid for terrain: a mob turned 20 degrees, a sign or
+// blend back to themselves (from ~26 degrees, fully past ~41: steep bevels
+// on contrasty textures, cross-shaped plants): no hard switch. Only valid for terrain: a mob turned 20 degrees, a sign or
 // banner at a 22.5-degree step or the held item would be snapped to the
 // nearest world axis (lit as that face near the terminator), so those
 // keep their own normal (surfaceFaceNormal, FLAG_TERRAIN, DECISIONS #97).
