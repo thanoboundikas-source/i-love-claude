@@ -42,6 +42,7 @@ const bool shadowHardwareFiltering = true;
 #define FOLIAGE_SSS //Leaves and plants let some sunlight through.
 #define BOUNCE_LIGHT //Warm sunlight bounced off the ground onto walls and undersides.
 #define AO_STRENGTH 100 // [0 50 100 150 200] Darkening in block corners and crevices (vanilla ambient occlusion), percent. 50 = the old Solstice look.
+#define GOLDEN_LIFT 73 // [0 50 73 85] Low-sun key light on the ground at golden hour and in the morning / afternoon, percent (0 = off).
 const float sunPathRotation = -30.0; // [-45.0 -30.0 -20.0 -10.0 0.0 10.0 20.0 30.0 45.0]
 
 // ---------------------------------------------------------------- Water
@@ -54,7 +55,7 @@ const float sunPathRotation = -30.0; // [-45.0 -30.0 -20.0 -10.0 0.0 10.0 20.0 3
 // ---------------------------------------------------------------- Atmosphere
 #define FOG //Distance fog matched to the sky colour, thicker in rain.
 #define FOG_DENSITY 100 // [50 75 100 125 150 200] Distance fog amount, percent.
-#define GODRAYS //Subtle light shafts from the sun and moon (needs Shadows).
+#define GODRAYS //Light shafts from the sun and moon where something casts a shadow (needs Shadows).
 #define GODRAY_STRENGTH 100 // [50 75 100 150 200] Godray brightness, percent.
 #define GODRAY_SAMPLES 8 // [6 8 12 16] Godray samples per pixel.
 #define WET_LOOK //Surfaces darken and turn glossy in the rain.
@@ -67,7 +68,7 @@ const float sunPathRotation = -30.0; // [-45.0 -30.0 -20.0 -10.0 0.0 10.0 20.0 3
 #define SHARPEN_AMOUNT 50 // [25 50 75 100] Sharpening strength, percent.
 
 // ---------------------------------------------------------------- Colour grading
-#define FILMIC_CURVE //Cinematic tone curve: deeper blacks, soft highlight roll-off, midtones unchanged.
+#define FILMIC_CURVE //Cinematic tone curve: deeper blacks, soft highlight roll-off, midtones unchanged, moonlit blue nights.
 #define FILMIC_CONTRAST 100 // [50 75 100 125 150] Strength of the cinematic tone curve's shadow toe, percent.
 #define SPLIT_TONING //Warm sunlit highlights, cool shadows, daytime only. Never tints the sky, night or torch-lit caves.
 #define SPLIT_TONE_STRENGTH 100 // [50 75 100 150 200] Warm/cool toning amount, percent.

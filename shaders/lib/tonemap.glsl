@@ -4,8 +4,9 @@
     The curve is applied to the brightest channel and the colour is scaled by
     the same factor, so hue and saturation survive. FILMIC_CURVE adds a real
     toe (deeper blacks that keep their detail) and a soft shoulder, pivoting
-    at 0.18 so midtone brightness stays vanilla. Very hot highlights (sun,
-    lava cores) drift toward white. SPLIT_TONING warms bright warm-coloured
+    at 0.18 so midtone brightness stays vanilla, plus a gentler toe and a
+    moonlit blue low-light tint at night / underground. Very hot highlights
+    (sun, lava cores) drift toward white. SPLIT_TONING warms bright warm-coloured
     surfaces and cools neutral shadows on the daytime surface only (never
     the sky, never caves or night, so torch light is left alone).
 
@@ -41,9 +42,11 @@ float toeCurve(float x, float gate) {
 
 // Daytime surface only (gate = night / underground): torch- and lava-lit
 // caves and the night sky are left alone. surface = 0 for the sky, the
-// sun, the moon and clouds (depth 1 in final), so the sunset band and the
-// sun halo are never warmed or cooled. Already-blue surface pixels are
-// never cooled further.
+// sun, the moon and clouds seen against the sky (depth 1 in final; final
+// averages the mask over a 3x3 box so TAA jitter cannot flicker it, and
+// clouds composited over far terrain count as surface), so the sunset band
+// and the sun halo are never warmed or cooled. Already-blue surface pixels
+// are never cooled further.
 vec3 splitTone(vec3 c, float gate, float surface) {
     float st = float(SPLIT_TONE_STRENGTH) * 0.01 * (1.0 - gate) * surface;
     float L = luminance(c);
@@ -56,26 +59,32 @@ vec3 splitTone(vec3 c, float gate, float surface) {
     return c;
 }
 
-// surface: 1 = world geometry, 0 = sky (only split toning uses it).
+// surface: 1 = world geometry, 0 = sky, in between along silhouettes
+// (only split toning uses it).
 vec3 tonemapSolstice(vec3 hdr, float lowLightGate, float surface) {
     hdr = max(hdr, vec3(0.0)) * (float(EXPOSURE) * 0.01);
 
     // Low-light shift (the eye loses colour in the dark): dim pixels move
     // toward a cool tint. By day (gate 0) it is gentle and unchanged. At
-    // night and underground, non-warm pixels move further toward a moonlit
-    // blue, so moonlit grass reads blue-green instead of olive. Warm pixels
-    // (torch, lava and fire light: red above green, or yellow as on
-    // torch-lit grass) keep the old gentle shift, so block light and its
-    // amber falloff at levels 2-6 look as before.
+    // night and underground (FILMIC_CURVE on), non-warm pixels move further
+    // toward a moonlit blue, so moonlit grass reads blue-green instead of
+    // olive. Warm pixels (torch, lava and fire light: red above green, or
+    // yellow as on torch-lit grass) keep the old gentle shift, so block
+    // light and its amber falloff at levels 2-6 look as before.
     float lum = luminance(hdr);
     float dim = 1.0 - smoothstep(0.004, 0.06, lum);
     #ifdef FULLBRIGHT
         dim *= 0.25;
     #endif
     dim *= mix(0.2, 1.0, lowLightGate);
-    float warmPx = saturate(max(3.0 * (hdr.r - hdr.g) / max(hdr.r, 1e-5),
-        4.0 * (min(hdr.r, hdr.g) - hdr.b) / max(max(hdr.r, hdr.g), 1e-5) - 0.6));
-    float moonlit = lowLightGate * (1.0 - warmPx);
+    // The moonlit tint is part of the Cinematic Tone Curve (FILMIC_CURVE):
+    // with the curve off the old gentle shift is used everywhere.
+    float moonlit = 0.0;
+    #ifdef FILMIC_CURVE
+        float warmPx = saturate(max(3.0 * (hdr.r - hdr.g) / max(hdr.r, 1e-5),
+            4.0 * (min(hdr.r, hdr.g) - hdr.b) / max(max(hdr.r, hdr.g), 1e-5) - 0.6));
+        moonlit = lowLightGate * (1.0 - warmPx);
+    #endif
     vec3 lowTint = mix(vec3(0.86, 0.95, 1.12), MOONLIT_TINT, moonlit);
     hdr = mix(hdr, vec3(lum) * lowTint, dim * mix(0.45, 0.60, moonlit));
 

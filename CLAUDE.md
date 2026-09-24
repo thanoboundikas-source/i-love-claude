@@ -110,7 +110,7 @@ not show Iris INFO lines such as "Using shaderpack".
 - **Direction (Chris, 2026-09-24, first in-game test):** "very hazy", "make it
   more cinematic", "the lighting doesn't look good". Target: **clear and
   cinematic**. This replaces the old "Not filmic" line. Do not undo it in
-  later sessions (DECISIONS #67-86).
+  later sessions (DECISIONS #67-94).
 - Mood: Complementary Reimagined's colour. Bright, saturated, clean and
   vanilla-faithful in the brightness of sunlit surfaces, with cinematic
   contrast: deep, clean blacks that are never crushed, soft highlight
@@ -121,16 +121,22 @@ not show Iris INFO lines such as "Using shaderpack".
   than the sky behind it. Haze is never brighter than the light could
   scatter. Rain and thunder stay clearly foggy.
 - Lighting quality: Bliss/Photon level. A strong warm sun key (about 5600 K
-  at noon, about 3400 K at the horizon) against a cooler, clearly darker sky
+  at noon, about 3100 K at the horizon) against a cooler, clearly darker sky
   fill (about 5:1 sunlit to shaded tops at noon). Golden hour stays
   directional down to the horizon and warm: the low sun's key is lifted on
-  flat ground (sunlit grass golden, sunlit snow peach) while shade stays
-  fill-lit and cool; peach-tinged sky fill, sunlit ground at least as
-  bright as the pre-v2 look and golden, shade deeper and clean (so the
-  frame is ~10-25% darker than the veiled pre-v2 look, #85), no pop at the
-  sun/moon switch. Night shade is dark but never pure black (at most ~3%
-  of moonlit ground under 12/255), and moonlit ground reads cool
-  blue-green, not olive (block light keeps its colour). Soft filtered shadows, no acne,
+  the block face (GOLDEN_LIFT; the generated bump stays linear on top, so
+  sunlit ground never gets dark dashes) with sunlit grass golden and
+  sunlit snow peach, while shade stays fill-lit and cool under a lilac-blue
+  sunset sky fill (warm key / cool shade down to the horizon, #89). Sunlit
+  ground at least as bright as the pre-v2 look and golden, shade deeper
+  and clean (so the frame is ~10-25% darker than the veiled pre-v2 look,
+  #85), no pop at the sun/moon switch. With the sun 10-45 degrees
+  (morning and afternoon, hours of every day) sunlit ground is close to
+  vanilla's brightness (matching it from ~20 degrees) and rises smoothly
+  to noon, never a dull dip (#88). Night shade is dark but never pure
+  black (at most ~3% of moonlit ground under 12/255), and moonlit ground
+  reads cool blue-green, not olive (block light keeps its colour; the
+  tint is part of FILMIC_CURVE, #93). Soft filtered shadows, no acne,
   no light leaking, vanilla-strength corner AO in shade, warm ground
   bounce, coloured block light (hot core, amber falloff, levels 2-6 still
   readable in caves; warm torch/lava, cool soul fire).
@@ -140,7 +146,9 @@ not show Iris INFO lines such as "Using shaderpack".
 - Clouds: match Complementary Reimagined's default style as closely as possible,
   from scratch: vanilla cloud shapes extruded into thick solid blocky volumes
   with visible sides and undersides. Lit like solid objects: bright sunlit tops,
-  softly shaded far sides, undersides tinted by sky and sunset colour. Warm lit
+  softly shaded far sides, undersides tinted by sky and sunset colour (with a
+  high sun the undersides are darker than the sun-averted sides, so clouds
+  seen toward the sun read as volumes, not flat plates, #92). Warm lit
   side / cool shaded side at sunset, dim bluish moonlit at night. Slightly soft
   edges but clearly blocky — not fluffy photoreal cumulus, not a flat texture.
   Vanilla height, slow drift, soft ground shadows in REGULAR/INSANE, fade into
@@ -152,16 +160,25 @@ not show Iris INFO lines such as "Using shaderpack".
   (no bright band at the world edge). Godrays are shafts only where
   something casts a shadow (near 48 blocks): lit air next to shadowed air,
   found in screen space across the shafts, comparing rays over the
-  shorter of their two marches. Never an open-air glow; no pixel glows
-  more than the light its own ray receives, so a fully shadowed ray
-  (a shaded trunk, a wall in shade) never glows and a shadowed area never
-  glows more than the lit air beside it. Rain fog and wet look.
+  shorter of their two marches, and clearly visible under trees and at
+  tree or hill edges toward a low sun (#90). Never an open-air glow. What
+  the code guarantees: no pixel glows more than the light its own ray
+  receives, so a fully shadowed ray (a shaded trunk, a wall in shade)
+  never glows. What it does not: the glow marks where the shadow changes
+  most within ~4% of the screen across the shafts, so inside a partly
+  shadowed band wider than that, the pixels next to full shadow can glow
+  more than the fully lit air on the band's other side (known limit,
+  #90). Rain fog and wet look.
 - Post: a hue-preserving cinematic tonemap (toe + soft shoulder, pivot 0.18;
-  a gentler toe and a moonlit low-light tint at night / underground) with a
-  fixed time-of-day exposure (night/underground x1.25; golden hour x1.12,
-  rising to x1.40 at the horizon as the sun's key fades). Split toning on
-  the daytime surface only (warm lit / cool shade, never the sky, which is
-  masked by depth, never night or torch-lit caves), a subtle vignette, thresholded bloom (only real highlights glow:
+  a gentler toe and a moonlit low-light tint at night / underground, both
+  part of FILMIC_CURVE) with a fixed time-of-day exposure (night/underground
+  x1.25; golden hour x1.12, rising to x1.40 at the horizon as the sun's key
+  fades, x1.40 throughout with GOLDEN_LIFT 0; mid-height sun up to x1.24
+  around 20 degrees, x1.00 from ~53 so noon is unchanged). Split toning on
+  the daytime surface only (warm lit / cool shade, never the sky, the sun,
+  the moon or clouds seen against the sky, which are masked by depth over a
+  3x3 box so TAA jitter cannot flicker it along silhouettes; clouds over far
+  terrain are toned; never night or torch-lit caves), a subtle vignette, thresholded bloom (only real highlights glow:
   nothing below HDR 1.5, so snow and sand never veil), TAA with Catmull-Rom
   history clamped against ringing, light sharpening. Optional darken-only
   local contrast (off by default). Every grading feature has its own toggle
@@ -228,7 +245,8 @@ Pass order (Overworld) and when each runs:
   from 4 neighbour taps of colortex4.a plus depthtex0 at each tap; water
   features or GODRAYS) → `composite2` (TAA) →
   `final` (sharpen, local contrast, bloom, vignette, time-of-day exposure,
-  tonemap + grade; reads depthtex0 for the split-toning sky mask).
+  tonemap + grade; reads a 3x3 box of depthtex0 for the split-toning sky
+  mask).
 - Switched off with `program.<name>.enabled` blocks in shaders.properties.
 - Nether/End: `shaders/nether/`, `shaders/end/` (dimension.properties), a
   forward pipeline using the vanilla lightmap (`program/dim_*`).
@@ -243,7 +261,10 @@ plains colours (texture mean x biome tint, #85; before 2026-09-24 the
 preview grass was twice as green, so older numbers in DECISIONS read
 greener and brighter than the game). `snow` is the bloom test (snow-white
 ground must not bloom); `canopy` is the godray test (camera under a holed
-leaf roof: shafts only from lit holes, shaded trunks must never glow). The
+leaf roof: shafts only from lit holes and the roof's sunward edge, fully
+shadowed trunks must never glow). `pbr`'s last three rows (grass with the
+plains tint, sand, dirt) are golden hour with generated normals: sunlit
+ground must show no dark dashes. The
 HDR chain gives final.fsh a depthtex0 stand-in (sky mask) and mirrors
 composite1's godray shaft step.
 `previews/baseline_*.png` are the pre-2026-09-24 look with the old green

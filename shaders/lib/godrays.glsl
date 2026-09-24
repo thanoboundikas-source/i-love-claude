@@ -55,10 +55,18 @@ float godrayAmount(vec3 playerEnd, float jitter) {
 // to a near surface, even a fully shadowed one, glowed by the difference
 // in ray length (hourglass bands on shaded tree trunks, DECISIONS #83). A
 // shorter neighbour keeps its own (smaller) deficit, so the far side of a
-// near dark object gets no rim. And a pixel never gets more than the light
-// its own ray receives (optical depth minus its deficit): a fully shadowed
-// ray never glows, and a shadowed pixel never glows more than the lit air
-// beside it.
+// near dark object gets no rim.
+//
+// What this guarantees: no pixel glows more than the light its own ray
+// receives (optical depth minus its deficit), so a fully shadowed ray
+// never glows. What it does not: the glow marks where the deficit changes
+// most within GODRAY_FAR across the shafts, an edge detector, not a
+// comparison with the lit air beside a whole band. Inside a partly
+// shadowed band wider than ~4% of the screen, the pixels next to full
+// shadow can glow more than the fully lit air on the band's other side
+// (1D worked case, 48-block rays: lit air next to a vis-0.9 band 0.083,
+// the band's pixels next to full shadow 0.355, its middle 0; DECISIONS
+// #90).
 //
 // Sun shafts are parallel in the world, so on screen they all run through
 // the vanishing point of the light direction. The 4 neighbours sit ACROSS
@@ -98,10 +106,11 @@ float phaseHG(float cosTheta, float g) {
 vec3 godrayLight(float amount, vec3 viewDirWorld) {
     float eyeSky = float(eyeBrightnessSmooth.y) / 240.0;
     float phase = phaseHG(dot(viewDirWorld, lightDir), 0.72);
-    float strength = 0.08 * float(GODRAY_STRENGTH) * 0.01;
-    // The golden-hour key is 2-3x brighter than the pre-v2 one; keep the
-    // low-sun shafts at their old brightness so they never become a veil.
-    float lowSun = mix(0.6, 1.0, smoothstep(0.0, 0.30, lightDir.y));
-    return directLight * amount * phase * strength * lowSun * smoothstep(0.1, 0.6, eyeSky) * (1.0 - rainF * 0.6);
+    // 0.24 (was 0.08 with a x0.6 low-sun damper, which left real shafts
+    // invisible): the neighbour step and the cap above already keep open
+    // air and fully shadowed rays at exactly 0, so the strength only scales
+    // real shafts (DECISIONS #90).
+    float strength = 0.24 * float(GODRAY_STRENGTH) * 0.01;
+    return directLight * amount * phase * strength * smoothstep(0.1, 0.6, eyeSky) * (1.0 - rainF * 0.6);
 }
 #endif

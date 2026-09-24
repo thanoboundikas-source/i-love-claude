@@ -48,7 +48,10 @@ float cloudEntryDistance(vec3 origin, vec3 dir) {
 vec3 shadowFor(Surface s, vec3 playerPos, bool isHand) {
     #ifdef SHADOWS
         if (isHand) return vec3(skyShadowProxy(float(eyeBrightnessSmooth.y) / 240.0));
-        float ndl = dot(s.normal, lightDir);
+        // Faces turned from the light get no direct light. A bump bevel that
+        // tilts away from a low sun on a sunlit face still gets the face's
+        // lifted key (lighting.glsl), so it must still read the shadow map.
+        float ndl = max(dot(s.normal, lightDir), dot(terrainFaceNormal(s.normal), lightDir));
         if (ndl <= 0.0 && (s.flags & FLAG_SSS) == 0) return vec3(0.0);
         float fade = shadowEdgeFade(playerToShadowClip(playerPos));
         vec3 vis = vec3(1.0);

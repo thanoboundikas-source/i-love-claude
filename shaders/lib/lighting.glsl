@@ -4,8 +4,8 @@
     Units: linear HDR, 1.0 = white surface lit by the noon sun head-on.
     Light terms:
       direct  - sun/moon * N.L * shadow (shadow map when SHADOWS is on,
-                sky-light proxy otherwise); N.L lifted at a low sun
-                (GOLDEN_LIFT)
+                sky-light proxy otherwise); the block face's N.L lifted
+                at a low sun (GOLDEN_LIFT)
       ambient - sky light, vanilla-like directional falloff, AO
       block   - torch light from the lightmap, tinted by COLORED_LIGHT
       floor   - tiny minimum so caves are not pure black (FULLBRIGHT lifts it)
@@ -81,23 +81,43 @@ vec3 blockLightColor(vec3 tint, float tintWeight, float b) {
     return c;
 }
 
-// Golden-hour key lift: with the sun a few degrees up, a flat top gets
-// N.L = sin(elevation) (~0.1) and was lit almost only by the cool sky fill,
-// so golden-hour ground kept its noon colour and looked flat. The bright
-// sky around a low sun lights the ground from nearly the sun's direction,
-// so at a low sun the key's N.L is lifted with a power curve: tops get
-// ~0.44 of the key at 6 degrees, sun-facing sides are unchanged, and it is
-// still 0 at N.L = 0 (the shadow map path drops N.L <= 0 faces anyway) and
-// still multiplied by the sun's shadow, so shade stays fill-only and cool.
-// Fades out by sun height ~0.45 and below the horizon (the moon never lifts).
-const float GOLDEN_LIFT = 0.73;
+// The block face a (possibly bumped) normal belongs to. Terrain faces are
+// axis-aligned and generated bevels tilt them by well under 45 degrees, so
+// the largest axis is the face. Normals far from every axis (rotated entity
+// faces, very strong bevels) blend back to themselves: no hard switch.
+vec3 terrainFaceNormal(vec3 n) {
+    vec3 an = abs(n);
+    vec3 axisN = an.y >= max(an.x, an.z) ? vec3(0.0, sign(n.y), 0.0)
+               : (an.x >= an.z ? vec3(sign(n.x), 0.0, 0.0) : vec3(0.0, 0.0, sign(n.z)));
+    return normalize(mix(n, axisN, smoothstep(0.75, 0.90, max(an.x, max(an.y, an.z)))));
+}
+
+// Low-sun key lift (GOLDEN_LIFT, percent; 0 = off). With the sun a few
+// degrees up a flat top gets N.L = sin(elevation) (~0.1) and was lit almost
+// only by the cool sky fill, so golden-hour ground kept its noon colour and
+// looked flat. The bright sky around a low sun lights the ground from
+// nearly the sun's direction, so the key reaching the *block face* is
+// lifted with a power curve, pow(face N.L, 1 - lift): tops get ~0.44 of the
+// key at 6 degrees, sun-facing sides barely change, faces turned away get
+// nothing, and it is still multiplied by the sun's shadow, so shade stays
+// fill-only and cool. The generated bump stays linear on top of the lifted
+// face, so bevels tilted away from a low sun keep the face's light instead
+// of dropping to 0 (dark dashes on sunlit ground, DECISIONS #87).
+// Full lift at the horizon; above golden hour a partial lift (x0.85,
+// fading out over sun height 0.10-0.80, about 6-53 degrees) keeps the
+// morning / afternoon key from going flat (#88). Noon with the default sun
+// path (60 degrees) is unchanged, and the moon is never lifted.
+float goldenLift() {
+    float up = max(sunsetF, 0.85 * (1.0 - smoothstep(0.10, 0.80, sunElev)));
+    return float(GOLDEN_LIFT) * 0.01 * up * smoothstep(0.0, 0.01, sunElev);
+}
 
 // Assemble the lighting. `shadow` is the direct-light visibility (rgb so
 // stained glass can tint it), already including the leak guard.
 vec3 shadeSurface(Surface s, vec3 shadow, vec3 blockTint, float blockTintWeight) {
     float NdotL = dot(s.normal, lightDir);
-    float lift = GOLDEN_LIFT * sunsetF * smoothstep(0.0, 0.01, sunElev);
-    float diffuse = pow(saturate(NdotL), 1.0 - lift);
+    float faceL = saturate(dot(terrainFaceNormal(s.normal), lightDir));
+    float diffuse = min(saturate(NdotL) + max(pow(faceL, 1.0 - goldenLift()) - faceL, 0.0), 1.0);
 
     #ifdef FOLIAGE_SSS
         if ((s.flags & FLAG_SSS) != 0) {

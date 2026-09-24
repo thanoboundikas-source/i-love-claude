@@ -54,12 +54,19 @@ float cloudCoverageSmooth(vec2 worldXZ) {
 vec3 cloudFaceLight(vec3 n, vec3 viewDir, float sunShadow) {
     float ndl = dot(n, lightDir);
     // Sun-dominated like a real cloud: faces toward the light get the full
-    // sun (shadowed by clouds in front); every face also gets 0.22 of it,
+    // sun (shadowed by clouds in front); every face also gets 0.22 of it
     // scattered through the cloud body (never shadowed), so shade stays
     // bright and neutral instead of taking on the sky's blue. At sunset the
     // high cloud layer still catches the sun after the ground has lost it.
-    float glow = 1.0 + 1.2 * sunsetF * step(0.0, dot(lightDir, sunDir));
-    vec3 light = directLight * glow * (max(ndl, 0.0) * sunShadow + 0.22);
+    // With the sun high (above ~20 degrees) the underside sees the whole
+    // cloud's thickness between it and the sun, so it gets 0.13: seen
+    // toward the sun, sun-averted sides then read as lighter strips over
+    // darker undersides instead of one flat plate (DECISIONS #92). A low
+    // sun (golden hour, sunset) and the moon keep 0.22.
+    float sunLit = step(0.0, dot(lightDir, sunDir));
+    float glow = 1.0 + 1.2 * sunsetF * sunLit;
+    float scatter = n.y < -0.5 ? mix(0.22, 0.13, smoothstep(0.10, 0.35, lightDir.y) * sunLit) : 0.22;
+    vec3 light = directLight * glow * (max(ndl, 0.0) * sunShadow + scatter);
 
     // Sky light, much weaker than the sun: tops see the zenith, undersides
     // the horizon (and its sunset band).

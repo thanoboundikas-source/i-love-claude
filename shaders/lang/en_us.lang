@@ -64,6 +64,9 @@ option.BOUNCE_LIGHT.comment=Warm sunlight bounced off the ground onto walls and 
 option.AO_STRENGTH=Corner Shading
 option.AO_STRENGTH.comment=How dark block corners and crevices get in the shade (vanilla ambient occlusion). 50% = the old Solstice look, 0% = off.
 suffix.AO_STRENGTH=%
+option.GOLDEN_LIFT=Golden Hour Light
+option.GOLDEN_LIFT.comment=How much a low sun lights flat ground: golden sunlit grass at sunrise and sunset, and a brighter morning and afternoon. Shade stays cool. 0% = off (the image is brightened instead).
+suffix.GOLDEN_LIFT=%
 option.sunPathRotation=Sun Path Angle
 option.sunPathRotation.comment=Tilts the path of the sun and moon so noon shadows are not straight down.
 
@@ -83,7 +86,7 @@ option.FOG.comment=Distant terrain fades into the sky colour. Thicker in rain.
 option.FOG_DENSITY=Fog Amount
 suffix.FOG_DENSITY=%
 option.GODRAYS=Godrays
-option.GODRAYS.comment=Subtle shafts of light from the sun and moon. Needs Shadows.
+option.GODRAYS.comment=Shafts of light from the sun and moon where trees and terrain break it up (never a haze over open ground). Needs Shadows.
 option.GODRAY_STRENGTH=Godray Strength
 suffix.GODRAY_STRENGTH=%
 option.GODRAY_SAMPLES=Godray Quality
@@ -110,7 +113,7 @@ option.GENERATED_SPECULAR=Generated Specular
 option.GENERATED_SPECULAR.comment=Glossy highlights on smooth and metal blocks, worked out from the vanilla textures.
 
 option.FILMIC_CURVE=Cinematic Tone Curve
-option.FILMIC_CURVE.comment=Deeper, cleaner blacks and a soft roll-off in the highlights, like a film camera. Midtones keep their vanilla brightness and colours stay saturated.
+option.FILMIC_CURVE.comment=Deeper, cleaner blacks and a soft roll-off in the highlights, like a film camera, with a moonlit blue tint at night. Midtones keep their vanilla brightness and colours stay saturated.
 option.FILMIC_CONTRAST=Cinematic Contrast
 option.FILMIC_CONTRAST.comment=How deep the shadows go with the Cinematic Tone Curve.
 suffix.FILMIC_CONTRAST=%

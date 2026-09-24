@@ -40,8 +40,10 @@ const vec3 SUN_NOON        = vec3(1.00, 0.95, 0.88);
 const vec3 SUN_GOLDEN      = vec3(1.00, 0.60, 0.30);
 const vec3 MOON_COLOR      = vec3(0.58, 0.70, 1.00);
 // Light (not sky) colours: a warmer key than the sun disc/halo tints.
+// Golden = a ~3100 K blackbody (was 3400 K, (1.00, 0.55, 0.24)): with the
+// cool sunset fill, sunlit snow at the horizon stays peach (DECISIONS #89).
 const vec3 SUNLIGHT_NOON   = vec3(1.00, 0.91, 0.78);
-const vec3 SUNLIGHT_GOLDEN = vec3(1.00, 0.55, 0.24);
+const vec3 SUNLIGHT_GOLDEN = vec3(1.00, 0.50, 0.17);
 
 const float SUN_RADIUS_COS  = 0.99952;  // ~1.8 degrees
 const float MOON_RADIUS_COS = 0.99939;  // ~2.0 degrees
@@ -90,12 +92,13 @@ void initSky() {
     moonLight = MOON_COLOR * moonI * weatherDirect;
     directLight = lightIsSun ? sunLight : moonLight;
 
-    // Sky (ambient) light: a bluish white by day, a warm peach glow at sunset
-    // (the low sun lights the whole sky; a lilac fill turned golden-hour
-    // grass olive), dim blue at night. Overcast skies are dimmer but
-    // relatively brighter than the sun.
+    // Sky (ambient) light: a bluish white by day, a cool lilac-blue at
+    // sunset (the colour of the golden-hour zenith; the warm key and its
+    // low-sun lift carry the ground's warmth, so shade stays cool: warm key
+    // / cool shade down to the horizon, DECISIONS #89), dim blue at night.
+    // Overcast skies are dimmer but relatively brighter than the sun.
     vec3 ambDay    = vec3(0.56, 0.72, 1.00) * 0.40;
-    vec3 ambSunset = vec3(0.88, 0.70, 0.62) * 0.40;
+    vec3 ambSunset = vec3(0.70, 0.68, 0.84) * 0.40;
     // Night fill 0.060 (was 0.040): shaded sides and the ground under trees
     // sat at 8-11/255 with real (vanilla) grass colours (DECISIONS #84).
     vec3 ambNight  = vec3(0.40, 0.52, 0.85) * 0.060;

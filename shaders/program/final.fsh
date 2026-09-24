@@ -18,10 +18,17 @@
 #include "/lib/common.glsl"
 #include "/lib/tonemap.glsl"
 
-// Brightness given back by FILMIC_CURVE at night / golden hour (see below).
+// Brightness given back by FILMIC_CURVE at night / golden hour / a
+// mid-height sun (see below).
 const float FILMIC_NIGHT_GAIN = 1.25;    // night / underground (the toe is gentle there)
-const float FILMIC_GOLDEN_GAIN = 1.12;    // sun above ~3 degrees (the key lift carries it)
+#if GOLDEN_LIFT == 0
+    // No low-sun key lift: the exposure carries golden hour alone (#69).
+    const float FILMIC_GOLDEN_GAIN = 1.40;
+#else
+    const float FILMIC_GOLDEN_GAIN = 1.12;    // sun above ~3 degrees (the key lift carries it)
+#endif
 const float FILMIC_HORIZON_GAIN = 1.40;   // sun at the horizon, where the key has faded out
+const float FILMIC_MIDSUN_GAIN = 1.25;    // mid-height sun, peak ~20 degrees, none from ~53 (noon unchanged)
 
 uniform sampler2D colortex2;
 #ifdef SPLIT_TONING
@@ -120,22 +127,50 @@ void main() {
         // noon and at midnight. FULLBRIGHT halves the toe, so half the gain.
         // Golden hour (sun height 0-0.40): the low-sun key lift in
         // lighting.glsl lights the ground, so only a small gain is needed
-        // (x1.12). Within ~2 degrees of the horizon the key fades out
-        // (sky.glsl, sun height 0-0.05), so the gain rises to x1.40 as it
-        // goes and blends into the night gain through twilight with no dip.
+        // (x1.12; x1.40 with GOLDEN_LIFT 0). Within ~2 degrees of the
+        // horizon the key fades out (sky.glsl, sun height 0-0.05), so the
+        // gain rises to x1.40 as it goes and blends into the night gain
+        // through twilight with no dip.
+        // Mid-height sun (about 10-45 degrees): flat ground gets only
+        // sin(elevation) of the key once the golden lift and gain fade, and
+        // the frame sat under vanilla for hours of every day (DECISIONS
+        // #88; lighting.glsl keeps a partial lift there too). FILMIC_MIDSUN_GAIN fades in as the golden gain
+        // fades out and away again toward noon: in total x1.15 at 6
+        // degrees, x1.21 at 14, x1.24 at 20, x1.13 at 35, x1.03 at 45 and
+        // x1.00 from ~53 (noon with the default sun path is 60). Off at
+        // night and underground (lowLightGate), so caves are unchanged.
         float lowGain = FILMIC_NIGHT_GAIN;
         #ifdef FULLBRIGHT
             lowGain = 1.0 + (FILMIC_NIGHT_GAIN - 1.0) * 0.5;
         #endif
-        float goldenGate = (1.0 - smoothstep(0.0, 0.40, sunH)) * (1.0 - lowLightGate);
+        float goldenF = 1.0 - smoothstep(0.0, 0.40, sunH);
+        float goldenGate = goldenF * (1.0 - lowLightGate);
         float goldenGain = mix(FILMIC_HORIZON_GAIN, FILMIC_GOLDEN_GAIN, smoothstep(0.02, 0.055, sunH));
-        hdr *= mix(1.0, lowGain, lowLightGate) * mix(1.0, goldenGain, goldenGate);
+        float midGate = (1.0 - goldenF) * (1.0 - smoothstep(0.35, 0.80, sunH)) * (1.0 - lowLightGate);
+        hdr *= mix(1.0, lowGain, lowLightGate) * mix(1.0, goldenGain, goldenGate)
+             * mix(1.0, FILMIC_MIDSUN_GAIN, midGate);
     #endif
 
-    // Split toning never touches the sky, sun, moon or clouds (depth 1).
+    // Split toning never touches the sky, the sun, the moon or clouds seen
+    // against the sky (depth 1; clouds composited over far terrain, which
+    // has depth < 1, are toned). TAA jitters depthtex0 every frame but
+    // colortex2 is already resolved, so a 1-pixel mask would flip on and
+    // off along every silhouette at up to 7.5 Hz. The mask is the average
+    // of a 3x3 box of depth tests: a jitter that moves an edge by a pixel
+    // flips one row (or a diagonal) of it, at most 3 of the 9 taps, so the
+    // tint on the pixels next to a silhouette changes by at most 1/3 (~1
+    // level at the default strength; a 5-tap plus still flips 3 of its 5
+    // taps on the edge row, DECISIONS #91). Pure sky and pure geometry are
+    // unchanged.
     float surface = 1.0;
     #ifdef SPLIT_TONING
-        surface = texelFetch(depthtex0, px, 0).r < 1.0 ? 1.0 : 0.0;
+        float geo = 0.0;
+        for (int dy = -1; dy < 2; dy++) {
+            for (int dx = -1; dx < 2; dx++) {
+                geo += texelFetch(depthtex0, clamp(px + ivec2(dx, dy), ivec2(0), maxP), 0).r < 1.0 ? 1.0 : 0.0;
+            }
+        }
+        surface = geo * (1.0 / 9.0);
     #endif
     vec3 col = tonemapSolstice(hdr, lowLightGate, surface);
     col = linearToSrgb(col) + ditherRGB8(gl_FragCoord.xy);

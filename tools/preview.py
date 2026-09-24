@@ -788,6 +788,7 @@ PBR_BODY = r"""#version 330 compatibility
 uniform sampler2D gtexture;
 uniform int useNormals;
 uniform int isMetal;
+uniform vec3 albedoTint;   // biome tint (vertex colour in the game), 1 = none
 in vec2 texcoord;
 layout(location = 0) out vec4 outColor;
 void main() {
@@ -798,7 +799,7 @@ void main() {
     float t = (60.0 - cameraPosition.y) / dir.y;
     vec3 p = cameraPosition + dir * t;
     vec2 uv = fract(p.xz / 1.0);
-    vec3 alb = texture(gtexture, uv).rgb;
+    vec3 alb = texture(gtexture, uv).rgb * albedoTint;
     vec3 n = vec3(0.0, 1.0, 0.0);
     float contrast = 0.0;
     if (useNormals == 1) n = generatedNormal(gtexture, uv, vec2(0.5), vec2(0.5), n, vec3(1.0, 0.0, 0.0), vec3(0.0, 0.0, 1.0), 4.0, contrast);
@@ -815,26 +816,39 @@ void main() {
 """
 
 
+# (texture, metal, sun angle, sRGB tint). 0.04 = low morning sun (~12
+# degrees): bumps show clearly. 0.02 = golden hour (~6 degrees, the golden
+# am preset): the low-sun key lift with generated normals, where bevels
+# tilted away from the sun must not turn into dark dashes (DECISIONS #87).
+PLAINS_GRASS = (0x91 / 255, 0xBD / 255, 0x59 / 255)
+PBR_ROWS = [
+    ("cobblestone", 0, 0.04, (1, 1, 1)), ("stone", 0, 0.04, (1, 1, 1)), ("oak_planks", 0, 0.04, (1, 1, 1)),
+    ("iron_block", 1, 0.04, (1, 1, 1)), ("white_concrete", 0, 0.04, (1, 1, 1)),
+    ("grass_block_top", 0, 0.02, PLAINS_GRASS), ("sand", 0, 0.02, (1, 1, 1)), ("dirt", 0, 0.02, (1, 1, 1)),
+]
+
+
 def pbr_sheet():
     build_bin()
     tmp = tempfile.mkdtemp(prefix="solstice-preview-")
     frag = shader_from_template(PBR_BODY, tmp)
     rows = []
-    for tex, metal in (("cobblestone", 0), ("stone", 0), ("oak_planks", 0), ("iron_block", 1), ("white_concrete", 0)):
+    for tex, metal, sun_angle, tint in PBR_ROWS:
         p, tw, th = vanilla_texture_raw(tmp, tex)
         row = []
         for normals in (0, 1):
-            sun_angle = 0.04   # low morning sun: bumps show clearly
             fwd = np.array([0.6, -0.8, 0.2])
             u = base_uniforms(sun_angle, fwd, 320, 200, cam_y=62.5) + [
-                f"t gtexture 0 {tw} {th} {p}", f"i useNormals {normals}", f"i isMetal {metal}", "i2 atlasSize 16 16"]
+                f"t gtexture 0 {tw} {th} {p}", f"i useNormals {normals}", f"i isMetal {metal}", "i2 atlasSize 16 16",
+                "v3 albedoTint %.4f %.4f %.4f" % tint]
             row.append(render(frag, 320, 200, u, tmp))
         rows.append(np.concatenate(row, 1))
-        print("  rendered", tex)
+        print("  rendered", tex, "golden hour" if sun_angle < 0.03 else "")
     out = os.path.join(ROOT, "previews", (OPTS["name"] or "pbr") + ".png")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     write_png(out, np.concatenate(rows, 0))
-    print("wrote", out, "| left = flat, right = generated normals; rows: cobblestone, stone, oak planks, iron block, white concrete")
+    print("wrote", out, "| left = flat, right = generated normals; rows: cobblestone, stone, oak planks, iron block,"
+          " white concrete (sun ~12 degrees), then grass (plains tint), sand, dirt at golden hour (sun ~6 degrees)")
 
 
 def parse_args():

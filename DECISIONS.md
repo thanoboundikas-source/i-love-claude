@@ -113,6 +113,10 @@ are preserved in git history, commit d1cb592.)
     *Changed again 2026-09-24 (second review), see #80:* at a low sun the
     key's N.L is lifted (GOLDEN_LIFT, lighting.glsl) and the key tint reaches
     its noon colour at sun height 0.55 (was 0.45).
+    *Changed again 2026-09-24 (fourth review), see #87-#89:* the lift acts on
+    the block face and is a menu option; a partial lift up to ~50 degrees;
+    sunset fill lilac-blue (0.70,0.68,0.84) x 0.40; horizon key (1,0.50,0.17)
+    (~3100 K, was 3400 K).
 21. **Block light curve** keeps a long gentle tail (levels 3–6 stay visible)
     with a hot core near torches; warm torch colour (1.0, 0.6, 0.3).
     *Changed 2026-09-24, see #67:* torch colour graded from TORCH_FAR
@@ -154,6 +158,8 @@ are preserved in git history, commit d1cb592.)
     *Changed 2026-09-24, see #67:* clouds are lit by the sun first (0.22
     unshadowed scattered sun on every face), sky ambient 0.8x + 0.15 zenith,
     sunset glow x(1 + 1.2 sunsetF).
+    *Changed 2026-09-24 (fourth review), see #92:* with the sun above ~20
+    degrees undersides get 0.13 scattered sun (sides and tops keep 0.22).
 26. **Soft edges come from optical depth**: a ray clipping a corner passes a
     short distance through the cloud and is partly transparent (density 2.2
     per block). Clearly blocky, slightly soft.
@@ -289,6 +295,8 @@ are preserved in git history, commit d1cb592.)
     *Replaced 2026-09-24 (second review), see #77:* weight vis^2 again, the
     effects pass stores the shadow deficit, and composite1 turns it into
     shafts by comparing each pixel with 4 neighbours across the shafts.
+    *Changed 2026-09-24 (fourth review), see #90:* strength 0.24, no low-sun
+    factor.
 55. **Wet look**: in rainy biomes (`biome_precipitation == 1`, so no wet
     deserts or snow), sky-exposed surfaces — mostly tops — darken (albedo
     squared toward itself) and gain smoothness 0.85, which the generated
@@ -439,6 +447,11 @@ are preserved in git history, commit d1cb592.)
       FILMIC_GOLDEN_GAIN 1.12 -> 1.20 (final.fsh) or GOLDEN_LIFT 0.73 -> 0.85
       (lighting.glsl), sunset fill ambSunset x0.40 -> x0.46 (sky.glsl), rain
       weatherDirect 0.075 -> 0.10 (sky.glsl). Lower each one to go darker.
+      *Corrected 2026-09-24 (fourth review), #87-#89:* GOLDEN_LIFT is now a
+      menu option, O > Lighting & Shadows > Golden Hour Light (73% -> 85%;
+      Chris can change it himself); the sunset fill is lilac-blue since #89,
+      so x0.46 brightens golden-hour shade without warming it; morning /
+      afternoon: FILMIC_MIDSUN_GAIN 1.25 (final.fsh, #88).
     - Blind spots of the 80x80-block preview, to confirm in game: fog past
       ~57 blocks and the border fade (checked numerically), caves (x1.25
       gain and the 0.80 night toe since #84, the desaturation gate and,
@@ -504,6 +517,11 @@ measured tiles); numbers below are INSANE, bottom 55% of each tile, sRGB.
     the shade along with the ground and kept golden hour flat (lit/shade 1.2
     on grass tops). The warmth now comes from a low-sun key lift, and the gain
     is x1.12 (x1.40 only at the horizon).
+    *Changed 2026-09-24 (fourth review), see #89:* the peach sunset fill
+    made golden-hour shade neutral-to-warm grey (snow shade B/R 0.94 at
+    sunset) once the key lift carried the ground's warmth; it is lilac-blue
+    again, (0.70,0.68,0.84) x 0.40. With GOLDEN_LIFT at 0 the x1.40 gain of
+    this entry comes back (#87).
 70. **Night shadows crushed to black, and torch pools cut off too fast.**
     The toe's black slope a = 0.2 cut everything below ~0.005 linear by 2
     stops, and the x1.5 night gain only made up for that at ~0.035. Now
@@ -622,7 +640,10 @@ against 0.40) was already there before this round.
     - centre, 0)): open air and uniform shadow give 0, lit air beside
     shadowed air gives a shaft, and a shadowed pixel never glows more than
     the lit air next to it (*correction, third review: only true for rays
-    of equal length, see below and #83*). Cost: 4 more bilinear taps of the low-res
+    of equal length, see below and #83*; *correction, fourth review: not
+    true in general, see #90: the step is an edge detector with a ~4%
+    reach, so inside a partly shadowed band wider than that the pixels
+    next to full shadow can outshine the lit air beside the band*). Cost: 4 more bilinear taps of the low-res
     buffer and one mat4 x vec4; no pass, buffer or loop. Three changes to
     the reviewer's version, each tested:
     - Deficit, not the lit amount. The suggested max(a0 - min(taps), 0) on
@@ -668,7 +689,11 @@ against 0.40) was already there before this round.
 78. **Split toning never touches the sky.** final.fsh reads depthtex0
     (declared only with SPLIT_TONING) and passes surface = 0 for depth 1:
     sky, sun, moon and our clouds, which deferred1 composites onto depth-1
-    pixels. Before, the sunset band toward the sun was warmed by up to 8
+    pixels (*correction, fourth review, #91:* deferred1 also composites
+    clouds over terrain beyond the cloud-layer entry distance, depth < 1,
+    and those are toned; the mask is now a 3x3 box average so TAA jitter
+    cannot flicker it, and the sky's 1-pixel border next to geometry gets a
+    partial tint, at most 2 levels in the preview). Before, the sunset band toward the sun was warmed by up to 8
     levels, and the grey rain/thunder sky cooled by 1-3. World sheet: sky
     pixels bit-identical with SPLIT_TONING on and off in all 20 tiles; the
     sky sheet through the HDR chain too. dim_final passes 1 (its gate of 1
@@ -686,7 +711,12 @@ against 0.40) was already there before this round.
     together: ground kept its noon colour and grass lit/shade was 1.2
     (noon 2.7-3.0). Now:
     - GOLDEN_LIFT 0.73 (lighting.glsl): diffuse = pow(N.L, 1 - lift), lift
-      = 0.73 x sunsetF while the sun is up. Tops get 0.44 of the key at 6
+      = 0.73 x sunsetF while the sun is up. (*Changed, fourth review, #87 /
+      #88:* the lift is applied to the block face's N.L and the bump stays
+      linear on top, because on bumped normals it made dark dashes; it is
+      a menu option; above golden hour a partial lift up to ~50 degrees.
+      "Sun-facing sides unchanged" and "tops 0.44 at 6 degrees" still hold
+      for the face.) Tops get 0.44 of the key at 6
       degrees (0.11 before), sun-facing sides are unchanged, and it is
       still multiplied by the sun's shadow, so shade stays fill-only and
       cool. The reviewer's wrap, saturate((N.L + k) / (1 + k)), was tried
@@ -758,6 +788,8 @@ against 0.40) was already there before this round.
     on the too-green preview grass. With vanilla colours the night was
     crushed (9.5-12.9% of the ground under 12/255); #84 fixes it. The
     moonlit tint itself holds: ground B/R 1.13-1.16.
+    *Changed 2026-09-24 (fourth review), see #93:* the moonlit tint is part
+    of FILMIC_CURVE; with the curve off the old 0.45 shift is used.
 82. **Preview tooling.** preview.c binds a depthtex0 stand-in for final.fsh
     (the scene shader's location 1: 1 = sky, 0.5 = geometry), so the #78
     mask is tested; the single-pass sky/cloud sheets pass surface 0. The
@@ -795,7 +827,12 @@ warnings; Apple GL 2497 and Iris patcher stage 193, 0 failed.
     light (depth - deficit). Open air still gives 0; a fully shadowed ray
     can never glow; a real beam between shadowed rays of similar length
     is unchanged. Cost: 4 texelFetch of depthtex0 and 4 screenToView in
-    composite1; no pass, buffer or loop. The preview mirror passes each
+    composite1; no pass, buffer or loop. (*Correction, fourth review, #90:*
+    what this guarantees is that no pixel glows more than its own ray's
+    light, so a fully shadowed ray never glows. It does not guarantee that
+    a shadowed area never glows more than the lit air beside it: inside a
+    partly shadowed band wider than GODRAY_FAR the pixels next to full
+    shadow can glow 4x more than the lit air on the band's other side.) The preview mirror passes each
     tap's own hit distance.
     The two reviewers' fixes were each tested and each fixed one half:
     - Technical (keep the deficit, cap at the ray's own light): fully
@@ -831,7 +868,8 @@ warnings; Apple GL 2497 and Iris patcher stage 193, 0 failed.
     shaft almost dark, and the 4-tap step only draws the edges of beams
     wider than ~4% of the screen, so godrays stay subtle (the menu says
     so). The canopy scene is the place to judge any later strength or
-    weight change.
+    weight change. (*Changed, fourth review, #90:* they were not subtle but
+    invisible; strength x3 and no low-sun damper.)
 84. **Night: no crushed shade with real grass colours.** With vanilla
     colours faces turned from the moon, the ground under trees and leaf
     undersides sat at 8-11/255: shade lit only by ambNight 0.040, then
@@ -883,7 +921,7 @@ warnings; Apple GL 2497 and Iris patcher stage 193, 0 failed.
     - Golden hour: sunlit grass is golden-olive, (75,82,32), R/G 0.86-0.89
       (#80's unmet R/G >= 0.70 was the preview), percentile lit/shade 5.0-
       6.4 (pre-v2 1.7-2.0), snow lit R/B 1.39-1.40 with shade B/R 1.09-
-      1.10, no orange wash (G/R toward the sun 1.11 sunset / 1.15 golden,
+      1.10 (*changed by #89:* 1.26-1.38 / 1.15-1.24), no orange wash (G/R toward the sun 1.11 sunset / 1.15 golden,
       pre-v2 0.98 / 1.07). Ground B/G is at or below noon's on 1 of 4
       tiles (shade share, as in #80). But the ground is 7-26% *darker*
       than pre-v2 (means golden am L/R, pm L/R 55.8 / 47.3 / 48.8 / 44.0,
@@ -929,3 +967,211 @@ warnings; Apple GL 2497 and Iris patcher stage 193, 0 failed.
     lit holes and the sunward roof edge; shaded trunks and floor must
     never glow. The godray mirror passes each neighbour's own hit
     distance to godrayShafts, as composite1 reads depthtex0 at each tap.
+
+### Fourth review fixes (mid-sun exposure, dash-free golden lift, cool golden shade, visible godrays, 2026-09-24)
+
+A technical and a visual re-check of the third round (927811b) found eight
+problems: dark dashes from the golden lift on bumped ground, two look
+changes with no menu toggle, godray and sky-mask claims the code does not
+keep, a split-toning mask that TAA jitter flickers, and, visually, a dull
+10-35 degree sun (the biggest part of Chris's "the lighting doesn't look
+good"), warm-grey golden-hour shade, invisible godrays and flat cloud
+plates toward the sun. All fixed or rewritten below. Each reviewer fix was
+re-tested here and four were changed (#88, #89, #91, #92). Numbers:
+INSANE (`--game`), sRGB levels, vanilla preview grass; "HEAD" = 927811b,
+"pre-v2" = 7dbdd21 through the same preview; "sweep" = the world camera
+at sun elevations 60-3 degrees without cloud shadows (with them a cloud
+shadow falls on the 14-degree lit mask), lit / shaded grass tops picked
+with a per-pixel mask, ground = bottom 45%. check.sh: 82 configs
+(GOLDEN_LIFT 0 and 85 are new), 2561 compiles, 0 errors / 0 warnings;
+Apple GL 2561 and Iris patcher stage 193, 0 failed. The #85 acceptance
+list: 35 / 38, the same three misses as HEAD (night mean +9.9 / +8.7%,
+noon R mean -16.2%). Comparison sheet: previews/round3_compare.png.
+
+87. **Golden lift on the block face, and a menu option.** #80 lifted the
+    *bumped* N.L, pow(N.L, 0.27-0.37). With GENERATED_NORMALS (on in
+    INSANE) texel bevels tilted away from a 3-10 degree sun have N.L <= 0
+    and got no key while the flat texel beside them got 0.43, and pow
+    rises almost vertically from 0: a dark dash on the shaded side of
+    every texel of sunlit grass and sand (reviewer's model: 10-13% of the
+    area). The HDR previews use flat normals, so #80 / #85 never saw it.
+    Now lighting.glsl recovers the face (terrainFaceNormal: the largest
+    axis, blended back to the normal itself when no axis dominates,
+    smoothstep 0.75-0.90 of the largest component, so rotated entity faces
+    never switch), lifts the face and keeps the bump linear:
+    diffuse = min(saturate(N.L) + max(pow(faceL, 1 - lift) - faceL, 0), 1).
+    The cap keeps particles (normal = light direction) and bevels facing a
+    low sun at the full key. deferred1's shadowFor tests max(bumped, face)
+    N.L, so away-tilted bevels on a sunlit face still read the shadow map.
+    The reviewer's snap only above 0.8 was replaced by the blend (no pop on
+    turning mobs). pbr sheet, new golden rows (sun ~6 degrees, generated
+    normals), luma p5/p50 and share under half the median, HEAD -> now
+    (flat normals): plains-tinted grass 0.63 / 2.2% -> 0.80 / 0.0% (0.81),
+    sand 0.86 -> 0.92 (0.96), dirt 0.55 / 1.9% -> 0.67 / 0.1% (0.69); the
+    bumped mean now equals the flat one (grass 76.3 vs 76.0; HEAD's bumped
+    ground was 2-3% darker than flat). No dashes left (zoom checked).
+    GOLDEN_LIFT is now an option, `#define GOLDEN_LIFT 73 // [0 50 73 85]`,
+    O > Lighting & Shadows > Golden Hour Light (slider, lang text), used as
+    percent. 0 = off: final.fsh then uses FILMIC_GOLDEN_GAIN 1.40 (#69's
+    exposure), so golden hour is not darker with it off (sweep 6 degrees
+    ground 50.9 vs 52.1 on; sunlit grass (54,66,33), not golden, the #69
+    look). check.sh flips it to 0 and 85. Not tested: entities and
+    NORMAL_STRENGTH 200, where bevels past ~41 degrees blend partly back to
+    the bumped normal (confirm in game).
+88. **Morning and afternoon were underexposed (the "lighting" complaint).**
+    The lift faded (sunsetF, gone by sun height 0.45) faster than sin(e)
+    grew, and the golden gain faded with it, so a flat top's key *fell*
+    from 0.434 at 6 degrees to 0.383 at 14-20 while the exposure fell from
+    x1.10 to x1.00: sunlit grass at 20 degrees (70,89,42), under vanilla
+    plains grass in daylight (~(87,112,54)) and 24% under pre-v2, for
+    roughly a third of every day. Two changes, both in the reviewer's form,
+    both retuned:
+    - Partial lift above golden hour (lighting.glsl goldenLift): lift x
+      max(sunsetF, 0.85 (1 - smoothstep(0.10, 0.80, sunElev))). The
+      reviewer's smoothstep(0.0, 0.75) was tested: lit grass G at 9 / 14 /
+      20 / 27 / 35 degrees 90 / 100 / 108 / 114 / 116; the later ramp gives
+      91 / 103 / 112 / 117 / 117 with golden hour and noon identical. The
+      flat-top key is now monotonic: 0.434 / 0.484 / 0.531 / 0.554 / 0.578
+      / 0.624 / 0.714 / 0.799 / 0.866 at 6 / 9 / 14 / 20 / 27 / 35 / 45 /
+      53 / 60 degrees.
+    - FILMIC_MIDSUN_GAIN 1.25 (final.fsh), midGate = (1 - goldenF) x
+      (1 - smoothstep(0.35, 0.80, sunH)) x (1 - lowLightGate), with the
+      ungated golden fraction goldenF. The reviewer's (1 - goldenGate)
+      carries goldenGate's (1 - lowLightGate) factor, which put a x1.05-
+      1.06 bump into twilight (sun 3-6 degrees below the horizon). Total
+      exposure x1.15 / 1.17 / 1.21 / 1.24 / 1.22 / 1.13 / 1.03 / 1.00 at 6
+      / 9 / 14 / 20 / 27 / 35 / 45 / 53+ degrees; night and caves
+      untouched (lowLightGate).
+    Sweep, lit grass G and ground mean, HEAD -> now (pre-v2): 60 degrees
+    126 / 90.0 -> 126 / 90.0 (131 / 102.7); 45: 116 / 85.3 -> 118 / 86.8
+    (124 / 99.1); 35: 107 / 78.5 -> 117 / 85.9 (117 / 94.4); 27: 97 / 71.2
+    -> 117 / 84.5 (111 / 89.9); 20: 89 / 63.8 -> 112 / 77.4 (104 / 83.7);
+    14: 86 / 60.0 -> 103 / 68.4 (93 / 76.2); 9: 85 / 55.9 -> 91 / 58.9 (80
+    / 67.3); 6: 83 / 51.9 -> 82 / 52.1 (69 / 59.1); 3: 80 / 47.8 -> 77 /
+    46.9 (58 / 51.7). The ground is now 6-10% under the veiled pre-v2 look
+    from 14 to 35 degrees (HEAD 17-24%), about like noon (-12%); sunlit
+    grass matches vanilla from ~20 degrees and is 8% under it at 14.
+    Grass lit/shade at 20 degrees 1.82 -> 2.00 (pre-v2 1.33), at noon
+    3.0 unchanged. World "morning" row (18.6 degrees): mean 60.5 / 64.7 ->
+    73.4 / 77.0 (pre-v2 80.5 / 83.5), sunlit grass (70,89,41) -> (90,111,49).
+    Sky through the HDR chain: morning +8 levels (144.6 -> 152.6, pixels
+    over 250 0.2 -> 0.3%), golden hour +2.5, noon / dusk / night identical.
+    Side effect: at 20-35 degrees sun-facing sides get a little more key
+    (face N.L 0.5 -> ~0.64 at 20 degrees). Trade-off: the day is now evenly
+    ~10% darker than pre-v2 instead of dipping in the morning; the only
+    remaining under-vanilla stretch is 6-12 degrees, which is golden hour
+    and warm by design.
+89. **Golden-hour shade is cool again.** #69's peach sunset fill
+    (0.88,0.70,0.62) was added when the key had no lift; since #80 the lift
+    carries the ground's warmth, and the peach fill turned shade neutral-
+    to-warm grey toward sunset (snow in shade at sunset (144,134,135), B/R
+    0.94; grass-top shade B/R 0.86 noon -> 0.60 sunset). Now ambSunset
+    (0.70,0.68,0.84) x 0.40, a lilac-blue sky fill, and SUNLIGHT_GOLDEN
+    (1.00,0.55,0.24) -> (1.00,0.50,0.17): a 3400 K blackbody -> ~3100 K
+    (same blue, on the blackbody locus). The reviewer's (0.66,0.68,0.88)
+    could not keep sunlit snow peach at the sunset preset (1.6 degrees,
+    where the key is weak: 59% intensity, lifted face 0.37, so the fill
+    dominates): lit snow R/B 1.20 / 1.18, and with warmer keys (1,0.52,
+    0.20) / (1,0.52,0.17) / (1,0.50,0.15) 1.22 / 1.21, 1.24 / 1.22, 1.25 /
+    1.23, never >= 1.25 on both tiles. (0.70,0.68,0.84) is still cool
+    (B/R 1.2) and with the 3100 K key gives 1.28 / 1.26. Results, HEAD ->
+    now: snow shade B/R sunset 0.94 / 0.95 -> 1.15 / 1.17, golden pm 1.09
+    / 1.10 -> 1.22 / 1.24 (target > 1.05); sunlit snow R/B sunset 1.42 /
+    1.40 -> 1.28 / 1.26, golden pm 1.40 / 1.39 -> 1.38 / 1.37 (target >=
+    1.25); grass-top shade B/R golden am / pm 0.72 / 0.70 -> 0.80 / 0.81,
+    sunset 0.62 -> 0.74; sunlit golden grass (75,82,32) / (76,83,33) ->
+    (75,82,33) / (76,83,34), unchanged; ground mean at sunset, sunrise and
+    golden hour within 1.2 levels (e.g. sunset 46.9 / 41.9 -> 45.7 / 41.0);
+    no orange wash toward the sun: sunset R G/R 1.109 -> 1.186, golden pm R
+    1.146 -> 1.177. Noon and night identical. The spec's horizon key is now
+    "about 3100 K".
+90. **Godrays: visible shafts, and what they guarantee.** On-off in all 38
+    world / hut / lake tiles was at most 0.07 levels mean, and even the
+    canopy test only showed a smudge (golden pm mean 0.32 / p99 4.1): the
+    strength 0.08 and #69's x0.6 low-sun damper, which was a guard against
+    the old open-air glow that #77 / #83 now remove by construction. Now
+    strength 0.24 and no damper (x3 at noon, x5 at golden hour). godrayLight
+    is shared lib code, so the preview mirror follows. Canopy toward the
+    sun, luma on - off, mean / p99 / max, HEAD -> now: noon 0.01 / 0.2 / 1.0
+    -> 0.02 / 0.7 / 1.0; morning 0.03 / 0.9 / 4.0 -> 0.08 / 2.1 / 11.5;
+    golden am 0.27 / 4.1 / 15.3 -> 1.06 / 14.9 / 45.0; golden pm 0.32 /
+    4.1 / 23.3 -> 1.24 / 15.4 / 62.7, a clear diagonal beam under the
+    roof's sunward edge. Away from the sun <= 0.02 mean, max 1. World /
+    hut / lake: every tile mean <= 0.28, p99 <= 5.3 (no veil); peaks are
+    the hut's sunset crest right beside the sun disc (36.5, glare on the
+    silhouette, kept) and radial streaks from the lake's hills at sunset
+    (24); noon <= 0.03 mean, night <= 0.02. Fully shadowed rays: a debug
+    render of the canopy flags every pixel whose own ray is fully shadowed
+    (58-93% of them at noon and morning); none gets any shaft value. At
+    golden hour no canopy ray is fully shadowed (the sun streams in under
+    the roof), so trunks beside the bright opening get the glow of the lit
+    air in front of them (trunk pixels mean +2.1 / p95 11 / max 58 levels,
+    max channel): a soft haze round the opening, not a rim on shaded
+    trunks. Accepted; confirm in a forest at golden hour, and Godray
+    Strength 75% is the knob if it reads milky. Menu text: "Shafts of
+    light ... where trees and terrain break it up (never a haze over open
+    ground)".
+    Honesty fix (CLAUDE.md Atmosphere line, godrays.glsl, #77 / #83
+    notes): the code guarantees only that no pixel glows more than the
+    light its own ray receives, so a fully shadowed ray never glows. It
+    does *not* guarantee that a shadowed area never glows more than the
+    lit air beside it: the neighbour step marks where the deficit changes
+    most within GODRAY_FAR (4% of the screen) across the shafts. Worked 1D
+    case (48-block rays, taps at 1.5% / 4%): lit air | a vis-0.9 band 6% of
+    the screen wide | full shadow: the lit air next to the band glows
+    0.083, the band's pixels next to full shadow 0.355 (4.3x), the band's
+    middle 0. Known limit, not fixed: comparing against the lit air across
+    a whole band needs a wider search (more taps or a pass).
+91. **Split-toning sky mask: TAA-safe, and worded honestly.** The mask
+    read this frame's jittered depthtex0 while toning the TAA-resolved
+    colour, so every pixel on a sky silhouette flipped between toned and
+    untoned over the 8-frame jitter cycle (sunset example: +3.0 R / -3.3 B
+    levels at up to 7.5 Hz, twice that at 200%). The reviewer's 5-tap plus
+    was tested on paper: a jitter that moves a straight edge by one pixel
+    flips the whole edge row, which is 3 of the plus's 5 taps (0.6 of the
+    flip, 1.8 R / 2.0 B levels), not 1/5. Now a 3x3 box average (fixed
+    loop bounds, 9 texelFetch, 8 more than HEAD, cached): at most 3 of 9
+    taps flip for a row or a diagonal, so at most 1/3 (1.0 R / 1.1 B
+    levels at the default strength, 2.0 / 2.3 at 200%). Preview (no
+    jitter): sky interior bit-identical with SPLIT_TONING on and off; the
+    sky's border within 2 px of geometry changes by at most 2 levels (mean
+    0.03). Wording (tonemap.glsl, final.fsh, CLAUDE.md, #78): the mask
+    spares the sky, the sun, the moon and clouds seen against the sky;
+    clouds that deferred1 composites over terrain past the cloud-layer
+    entry distance have depth < 1 and are toned (harmless in practice: the
+    camera is above the clouds or the terrain is a peak above them).
+92. **Cloud sides read against their undersides toward the sun.** Seen
+    toward a noon or morning sun every cloud was one flat lavender-grey
+    plate (luma p5-p95 166-190 with the median at 185): a sun-averted side
+    and the underside both got 0.22 of the sun as scattered light and
+    differed only by half the sky term. Now the underside, which sees the
+    whole cloud's thickness between it and a high sun, gets
+    mix(0.22, 0.13, smoothstep(0.10, 0.35, light height)) for the sun; the
+    moon and a low sun keep 0.22. The reviewer's flat 0.13 changed every
+    view: sunset clouds away from the sun (200,165,174) -> (184,153,171),
+    a duller mauve, and night clouds -6 levels (median). Now: noon toward the sun
+    median 185 -> 171 with the sides still at ~190 (lighter strips over
+    darker undersides), morning 192 -> 176; underside colour (163,183,225)
+    -> (155,176,221), still sky-blue (saturation 0.28 -> 0.30), not grey;
+    sunset medians 182 / 176 -> 179 / 173 (the #89 fill and key colours),
+    dusk within 2 levels, night identical; clouds seen from above (tops,
+    unchanged by this entry): at most 10 levels at sunset / dusk and 3 in
+    the morning (the #89 colours), noon and night identical.
+93. **The moonlit night tint belongs to the Cinematic Tone Curve.** It ran
+    with FILMIC_CURVE off too (and in caves and, through dim_final, the
+    Nether and End), though the spec lists it as part of that tonemap and
+    every grading feature must have a toggle. Now moonlit = 0 without
+    FILMIC_CURVE, which gives the pre-v2 0.45 shift toward (0.86,0.95,1.12)
+    everywhere. World night with the curve off: ground B/R 1.16 / 1.17 ->
+    0.99 / 0.99 (pre-v2's behaviour); with it on, unchanged. The menu text
+    of Cinematic Tone Curve now mentions the moonlit tint.
+94. **Preview tooling.** The pbr sheet has three golden-hour rows (sun
+    angle 0.02, ~6 degrees; grass_block_top with the plains tint #91BD59
+    through a new albedoTint uniform, sand, dirt), so the lift is tested
+    with generated normals. previews/round3_compare.png: labelled contact
+    sheet, old look (7dbdd21 through the current preview colours, canopy
+    scene added to that scratch copy) vs now, rows noon / morning (19
+    degrees) / golden hour / sunset / night of the world scene, golden-hour
+    canopy (godrays) and noon clouds, both views each. Unchanged blind
+    spots: the preview has no TAA jitter (#91 is reasoned, not rendered),
+    no entities (#87's blend), no Nether/End (#93), no real forest (#90).
