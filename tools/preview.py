@@ -258,6 +258,8 @@ def settings_overrides(profile=None, game=False, sets=()):
             cfg_b[k] = v.lower() in ("true", "on", "1")
         elif k in values or k in consts:
             cfg_v[k] = v
+        elif where == GAME_OPTIONS:
+            print(f"  note: {where}: skipping {k} (no longer an option)")
         else:
             sys.exit(f"{where}: unknown option {k}")
 
