@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""
+Regenerates the thin per-program stub files in shaders/ (and the dimension
+folders). Each stub is just: #version, an optional variant #define, and an
+#include of the shared program body in shaders/program/.
+
+Edit PROGRAMS below, then run: python3 tools/gen_stubs.py
+Stubs are generated files; put real code in shaders/program/.
+"""
+import os
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SHADERS = os.path.join(ROOT, "shaders")
+
+# (folder, program name, vertex body, fragment body, variant define or None)
+OVERWORLD = [
+    ("shadow", "shadow", "shadow", None),
+    ("gbuffers_terrain", "gbuffers_solid", "gbuffers_solid", "GB_TERRAIN"),
+    ("gbuffers_block", "gbuffers_solid", "gbuffers_solid", "GB_BLOCK"),
+    ("gbuffers_entities", "gbuffers_solid", "gbuffers_solid", "GB_ENTITY"),
+    ("gbuffers_hand", "gbuffers_solid", "gbuffers_solid", "GB_HAND"),
+    ("gbuffers_damagedblock", "gbuffers_solid", "gbuffers_solid", "GB_DAMAGE"),
+    ("gbuffers_spidereyes", "gbuffers_solid", "gbuffers_solid", "GB_GLOW"),
+    ("gbuffers_lightning", "gbuffers_solid", "gbuffers_solid", "GB_GLOW"),
+    ("gbuffers_entities_translucent", "gbuffers_forward", "gbuffers_forward", "FW_LIT"),
+    ("gbuffers_block_translucent", "gbuffers_forward", "gbuffers_forward", "FW_LIT"),
+    ("gbuffers_particles", "gbuffers_forward", "gbuffers_forward", "FW_LIT"),
+    ("gbuffers_particles_translucent", "gbuffers_forward", "gbuffers_forward", "FW_LIT"),
+    ("gbuffers_textured_lit", "gbuffers_forward", "gbuffers_forward", "FW_LIT"),
+    ("gbuffers_hand_water", "gbuffers_forward", "gbuffers_forward", "FW_LIT"),
+    ("gbuffers_textured", "gbuffers_forward", "gbuffers_forward", "FW_UNLIT"),
+    ("gbuffers_weather", "gbuffers_forward", "gbuffers_forward", "FW_WEATHER"),
+    ("gbuffers_armor_glint", "gbuffers_forward", "gbuffers_forward", "FW_ADDITIVE"),
+    ("gbuffers_beaconbeam", "gbuffers_forward", "gbuffers_forward", "FW_GLOW"),
+    ("gbuffers_basic", "gbuffers_forward", "gbuffers_forward", "FW_BASIC"),
+    # No gbuffers_line on purpose: when a pack provides it, Iris 26.1 patches it
+    # through its core-profile path (IrisRenderingPipeline: isLines), which
+    # leaves "#version 330 compatibility" and ftransform() unconverted -> Apple
+    # GL rejects it and the whole pack fails to load. Without it, outlines fall
+    # back to gbuffers_basic, which Iris converts and widens correctly.
+    ("gbuffers_water", "gbuffers_water", "gbuffers_water", None),
+    ("gbuffers_skybasic", "gbuffers_sky", "gbuffers_sky", None),
+    ("gbuffers_skytextured", "gbuffers_sky", "gbuffers_sky", None),
+    ("deferred", "fullscreen", "deferred_clouds", None),
+    ("deferred1", "fullscreen", "deferred_lighting", None),
+    ("composite", "fullscreen", "composite_fx", None),
+    ("composite1", "fullscreen", "composite_water", None),
+    ("composite2", "fullscreen", "composite_taa", None),
+    ("final", "fullscreen", "final", None),
+]
+
+# Nether and End: small forward fallback pipeline (see program/dim_forward.*).
+def dim_programs(dim_define):
+    fam = [
+        ("gbuffers_basic", "DF_UNLIT"), ("gbuffers_textured", "DF_UNLIT"),
+        ("gbuffers_textured_lit", "DF_LIT"), ("gbuffers_terrain", "DF_LIT"),
+        ("gbuffers_block", "DF_LIT"), ("gbuffers_water", "DF_LIT"),
+        ("gbuffers_entities", "DF_ENTITY"), ("gbuffers_hand", "DF_ENTITY"),
+        ("gbuffers_weather", "DF_LIT"), ("gbuffers_particles", "DF_LIT"),
+        ("gbuffers_armor_glint", "DF_UNLIT"), ("gbuffers_spidereyes", "DF_UNLIT"),
+        ("gbuffers_beaconbeam", "DF_UNLIT"), ("gbuffers_skytextured", "DF_SKY"),
+        ("gbuffers_skybasic", "DF_SKYBASIC"),
+    ]
+    out = [(name, "dim_forward", "dim_forward", [dim_define, v]) for name, v in fam]
+    out.append(("final", "fullscreen", "dim_final", [dim_define]))
+    return out
+
+
+FOLDERS = {
+    "": OVERWORLD,
+    "nether": dim_programs("DIM_NETHER"),
+    "end": dim_programs("DIM_END"),
+}
+
+
+def write_stub(path, body, define):
+    lines = ["#version 330 compatibility", ""]
+    for d in ([define] if isinstance(define, str) else (define or [])):
+        lines.append(f"#define {d} 1")
+    lines.append(f'#include "/program/{body}"')
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def main():
+    count = 0
+    for folder, programs in FOLDERS.items():
+        d = os.path.join(SHADERS, folder)
+        os.makedirs(d, exist_ok=True)
+        for name, vbody, fbody, define in programs:
+            write_stub(os.path.join(d, name + ".vsh"), vbody + ".vsh", define)
+            write_stub(os.path.join(d, name + ".fsh"), fbody + ".fsh", define)
+            count += 1
+    print(f"wrote {count} program stubs")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,131 @@
+profile.comment=POTATO: fastest - sky, lighting colour, tonemap, flat clouds. No shadows, reflections or post. REGULAR: everything, moderate quality, reflections and godrays at half resolution. INSANE: everything at max.
+
+screen.SKY=Sky & Clouds
+screen.LIGHTING=Lighting & Shadows
+screen.WATER=Water
+screen.ATMOSPHERE=Atmosphere
+screen.POST=Post Processing
+screen.PBR=Generated Materials
+screen.GRADING=Colour Grading
+
+option.FULLBRIGHT=Fullbright
+option.FULLBRIGHT.comment=Lifts the darkest light so caves are visible without torches. The colours stay graded, never flat grey.
+option.RENDER_SCALE=Render Scale
+option.RENDER_SCALE.comment=Resolution of the expensive passes: 3D clouds, water reflections and godrays. Lower = faster. The world itself stays sharp.
+value.RENDER_SCALE.50=0.50x
+value.RENDER_SCALE.60=0.60x
+value.RENDER_SCALE.70=0.70x
+value.RENDER_SCALE.75=0.75x
+value.RENDER_SCALE.80=0.80x
+value.RENDER_SCALE.90=0.90x
+value.RENDER_SCALE.100=1.00x
+option.HALF_RES_FX=Half-Res Reflections & Godrays
+option.HALF_RES_FX.comment=Runs water reflections and godrays at half of the Render Scale. On in REGULAR, off in INSANE.
+option.EXPOSURE=Brightness
+option.EXPOSURE.comment=Overall image brightness.
+suffix.EXPOSURE=%
+option.SATURATION=Saturation
+option.SATURATION.comment=Colour saturation after tonemapping.
+suffix.SATURATION=%
+
+option.STARS=Stars
+option.STARS.comment=Stars at night. They turn with the sky.
+option.CLOUDS=Clouds
+option.CLOUDS.comment=Clouds with vanilla shapes. Off removes clouds completely.
+option.CLOUDS_3D=3D Clouds
+option.CLOUDS_3D.comment=Thick blocky clouds with lit tops, shaded sides and tinted undersides. Off = a cheap flat vanilla-style layer.
+option.CLOUD_SHADOWS=Cloud Shadows
+option.CLOUD_SHADOWS.comment=Clouds cast soft shadows that drift across the ground.
+option.CLOUD_THICKNESS=Cloud Thickness
+option.CLOUD_THICKNESS.comment=Height of the blocky clouds in blocks. Vanilla clouds are 4.
+suffix.CLOUD_THICKNESS= blocks
+option.CLOUD_STEPS=Cloud Distance Quality
+option.CLOUD_STEPS.comment=How many cloud cells each pixel traces. More keeps low clouds near the horizon solid.
+
+option.SHADOWS=Shadows
+option.SHADOWS.comment=The sun and moon cast real, soft shadows.
+option.shadowMapResolution=Shadow Resolution
+option.shadowMapResolution.comment=Sharpness of shadows. Higher costs memory and speed.
+option.shadowDistance=Shadow Distance
+option.shadowDistance.comment=How far away shadows are drawn, in blocks.
+option.SHADOW_SAMPLES=Shadow Smoothness
+option.SHADOW_SAMPLES.comment=Samples used to soften shadow edges. More = smoother, slower.
+option.SHADOW_SOFTNESS=Shadow Softness
+option.SHADOW_SOFTNESS.comment=Width of the soft edge of shadows.
+suffix.SHADOW_SOFTNESS=%
+option.COLORED_SHADOWS=Coloured Shadows
+option.COLORED_SHADOWS.comment=Stained glass and water tint the sunlight that passes through them.
+option.COLORED_LIGHT=Coloured Block Light
+option.COLORED_LIGHT.comment=Light near glowing blocks takes their colour: soul fire blue, lava orange, redstone red. Based on what is on screen.
+option.FOLIAGE_SSS=Leaf Translucency
+option.FOLIAGE_SSS.comment=Sunlight shines through leaves and plants.
+option.BOUNCE_LIGHT=Bounce Light
+option.BOUNCE_LIGHT.comment=Warm sunlight bounced off the ground onto walls and the undersides of blocks.
+option.AO_STRENGTH=Corner Shading
+option.AO_STRENGTH.comment=How dark block corners and crevices get in the shade (vanilla ambient occlusion). 50% = the old Solstice look, 0% = off.
+suffix.AO_STRENGTH=%
+option.GOLDEN_LIFT=Golden Hour Light
+option.GOLDEN_LIFT.comment=How much a low sun lights flat ground: golden sunlit grass at sunrise and sunset, and a brighter morning and afternoon. Shade stays cool. 0% = off (with the Cinematic Tone Curve on, the image is brightened instead).
+suffix.GOLDEN_LIFT=%
+option.sunPathRotation=Sun Path Angle
+option.sunPathRotation.comment=Tilts the path of the sun and moon so noon shadows are not straight down.
+
+option.WATER_WAVES=Water Waves
+option.WATER_WAVES.comment=Gentle animated waves on water.
+option.WATER_REFLECTIONS=Water Reflections
+option.WATER_REFLECTIONS.comment=Water reflects the world on screen. When off, water still reflects the sky and clouds.
+option.WATER_REFRACTION=Water Refraction
+option.WATER_REFRACTION.comment=The underwater world bends through the water surface.
+option.SSR_STEPS=Reflection Quality
+option.SSR_STEPS.comment=Steps each reflection ray takes. More = more accurate reflections, slower.
+option.UNDERWATER_FOG=Underwater Fog
+option.UNDERWATER_FOG.comment=Tinted fog while you are under water.
+
+option.FOG=Distance Fog
+option.FOG.comment=Distant terrain fades into the sky colour. Thicker in rain.
+option.FOG_DENSITY=Fog Amount
+suffix.FOG_DENSITY=%
+option.GODRAYS=Godrays
+option.GODRAYS.comment=Shafts of light from the sun and moon where trees and terrain break it up (never a haze over open ground). Needs Shadows.
+option.GODRAY_STRENGTH=Godray Strength
+suffix.GODRAY_STRENGTH=%
+option.GODRAY_SAMPLES=Godray Quality
+option.GODRAY_SAMPLES.comment=Samples per pixel for godrays. More = smoother, slower.
+option.WET_LOOK=Rain Wetness
+option.WET_LOOK.comment=Surfaces darken and turn glossy in the rain.
+
+option.BLOOM=Bloom
+option.BLOOM.comment=Soft glow around bright things like the sun, lava and torches.
+option.BLOOM_STRENGTH=Bloom Strength
+suffix.BLOOM_STRENGTH=%
+option.TAA=Anti-Aliasing (TAA)
+option.TAA.comment=Smooths jagged edges and shimmering over time.
+option.SHARPEN=Sharpening
+option.SHARPEN.comment=Light sharpening to keep textures crisp after anti-aliasing.
+option.SHARPEN_AMOUNT=Sharpening Amount
+suffix.SHARPEN_AMOUNT=%
+
+option.GENERATED_NORMALS=Generated Normals
+option.GENERATED_NORMALS.comment=Adds bumpy surface detail worked out from the vanilla textures. No resource pack needed.
+option.NORMAL_STRENGTH=Normal Strength
+suffix.NORMAL_STRENGTH=%
+option.GENERATED_SPECULAR=Generated Specular
+option.GENERATED_SPECULAR.comment=Glossy highlights on smooth and metal blocks, worked out from the vanilla textures.
+
+option.FILMIC_CURVE=Cinematic Tone Curve
+option.FILMIC_CURVE.comment=Deeper, cleaner blacks and a soft roll-off in the highlights, like a film camera, with a moonlit blue tint at night. Midtones keep their vanilla brightness and colours stay saturated.
+option.FILMIC_CONTRAST=Cinematic Contrast
+option.FILMIC_CONTRAST.comment=How deep the shadows go with the Cinematic Tone Curve.
+suffix.FILMIC_CONTRAST=%
+option.SPLIT_TONING=Warm Light, Cool Shadows
+option.SPLIT_TONING.comment=In daylight, sunlit surfaces get a gentle golden warmth and shadows a slight cool tint. The sky, night time and torch-lit caves are left alone.
+option.SPLIT_TONE_STRENGTH=Warm/Cool Amount
+suffix.SPLIT_TONE_STRENGTH=%
+option.VIGNETTE=Vignette
+option.VIGNETTE.comment=Gently darkens the corners of the screen, like a camera lens.
+option.VIGNETTE_STRENGTH=Vignette Amount
+suffix.VIGNETTE_STRENGTH=%
+option.LOCAL_CONTRAST=Local Contrast
+option.LOCAL_CONTRAST.comment=Deepens shadows that sit next to bright areas, which cuts through haze. Never brightens anything.
+option.LOCAL_CONTRAST_STRENGTH=Local Contrast Amount
+suffix.LOCAL_CONTRAST_STRENGTH=%
